@@ -1,0 +1,30 @@
+{
+  "name": "manejarr",
+  "version": "1.0.0",
+  "description": "Service-to-service orchestration layer for managing torrent lifecycles between Deluge and the *arr suite (Radarr/Sonarr).",
+  "private": true,
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"nodemon server/index.js\" \"vite\"",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "reset-password": "node scripts/reset-password.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "cronstrue": "^3.14.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "node-cron": "^3.0.3",
+    "sql.js": "^1.11.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "nodemon": "^3.1.9",
+    "vite": "^6.3.2"
+  }
+}

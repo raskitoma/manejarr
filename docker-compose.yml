@@ -1,0 +1,19 @@
+services:
+  manejarr:
+    build: .
+    container_name: manejarr
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - TZ=${TZ:-UTC}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - NODE_ENV=production
+    volumes:
+      - manejarr_data:/app/data
+
+volumes:
+  manejarr_data:
