@@ -94,18 +94,6 @@ if [ ! -f "$ENV_FILE" ]; then
   echo -e "${CYAN}Generating encryption seeds...${NC}"
   ENCRYPTION_KEY=$(openssl rand -hex 32)
   
-  echo -e "${CYAN}Hashing admin password...${NC}"
-  ADMIN_PASSWORD_HASH=$(docker run --rm node:20-alpine node -e "
-    const bcrypt = require('bcrypt');
-    bcrypt.hash('${USER_PASSWORD}', 12).then(h => process.stdout.write(h));
-  " 2>/dev/null || echo "")
-
-  # Fallback if Docker isn't available for hashing
-  if [ -z "$ADMIN_PASSWORD_HASH" ]; then
-    echo -e "${YELLOW}Warning: Could not generate password hash via Docker.${NC}"
-    echo -e "${YELLOW}Ensure Docker is running to complete setup.${NC}"
-    exit 1
-  fi
 
   cat > "$ENV_FILE" <<EOF
 # Manejarr Configuration — Generated $(date -u +"%Y-%m-%dT%H:%M:%SZ")
