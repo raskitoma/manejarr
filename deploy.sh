@@ -107,14 +107,15 @@ ADMIN_PASSWORD_HASH=PENDING
 EOF
 
   echo -e "${CYAN}Building Manejarr image to generate secure credentials...${NC}"
-  docker compose build --quiet manejarr
+  docker build -q -t manejarr .
 
   echo -e "${CYAN}Generating secure password hash...${NC}"
   # Use the built image to hash the password securely
   ADMIN_PASSWORD_HASH=$(docker run --rm manejarr node -e "
     import bcrypt from 'bcrypt';
-    console.log(await bcrypt.hash('${USER_PASSWORD}', 12));
-  ")
+    const h = await bcrypt.hash('${USER_PASSWORD}', 12);
+    process.stdout.write(h);
+  " 2>/dev/null || echo "")
 
   if [ -n "$ADMIN_PASSWORD_HASH" ]; then
     sed -i "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}|" "$ENV_FILE"
@@ -128,14 +129,74 @@ else
   echo -e "${GREEN}✓ Existing .env file found${NC}"
   source "$ENV_FILE"
   
-  # Update existing values if provided via flags
+  if [ "$NON_INTERACTIVE" = false ]; then
+    read -p "Update Port [${PORT:-3000}]: " USER_PORT
+    PORT=${USER_PORT:-$PORT}
+    PORT=${PORT:-3000}
+    
+    read -p "Update Timezone [${TZ:-UTC}]: " USER_TZ
+    TZ_VAL=${USER_TZ:-$TZ}
+    TZ_VAL=${TZ_VAL:-UTC}
+    
+    if [ "$ADMIN_PASSWORD_HASH" = "PENDING" ]; then
+      echo -e "${YELLOW}⚠ Incomplete deployment detected. You must set an admin password.${NC}"
+      while [ -z "$USER_PASSWORD" ]; do
+        echo -e "Enter Admin Password:"
+        read -s USER_PASSWORD
+        echo ""
+        if [ -z "$USER_PASSWORD" ]; then echo -e "${RED}Password cannot be empty.${NC}"; fi
+      done
+    else
+      echo -e "Enter New Admin Password (leave blank to keep current):"
+      read -s USER_PASSWORD
+      echo ""
+    fi
+    
+    if [ -n "$USER_PASSWORD" ]; then
+      echo -e "${CYAN}Building Manejarr image to update credentials...${NC}"
+      docker build -q -t manejarr .
+      
+      echo -e "${CYAN}Generating new password hash...${NC}"
+      ADMIN_PASSWORD_HASH=$(docker run --rm manejarr node -e "
+        import bcrypt from 'bcrypt';
+        const h = await bcrypt.hash('${USER_PASSWORD}', 12);
+        process.stdout.write(h);
+      " 2>/dev/null || echo "")
+      
+      if [ -n "$ADMIN_PASSWORD_HASH" ]; then
+        sed -i "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}|" "$ENV_FILE"
+        echo -e "${GREEN}✓ Password updated${NC}"
+      fi
+    fi
+  else
+    # Non-interactive: use flags if provided, otherwise keep existing
+    PORT=${PORT:-$PORT}
+    TZ_VAL=${TZ_VAL:-$TZ}
+
+    if [ "$ADMIN_PASSWORD_HASH" = "PENDING" ]; then
+      echo -e "${YELLOW}Non-interactive mode detected 'PENDING' password. Auto-generating...${NC}"
+      USER_PASSWORD=$(openssl rand -base64 16)
+      echo -e "Generated Password: ${YELLOW}${USER_PASSWORD}${NC}"
+      
+      docker build -q -t manejarr .
+      ADMIN_PASSWORD_HASH=$(docker run --rm manejarr node -e "
+        import bcrypt from 'bcrypt';
+        const h = await bcrypt.hash('${USER_PASSWORD}', 12);
+        process.stdout.write(h);
+      " 2>/dev/null || echo "")
+      
+      if [ -n "$ADMIN_PASSWORD_HASH" ]; then
+        sed -i "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}|" "$ENV_FILE"
+      fi
+    fi
+  fi
+
+  # Apply flag-based overrides and update .env
   if [ -n "$PORT" ]; then
     sed -i "s/^PORT=.*/PORT=${PORT}/" "$ENV_FILE"
-    echo -e "${GREEN}✓ Port updated to ${PORT}${NC}"
   fi
   if [ -n "$TZ_VAL" ]; then
     sed -i "s/^TZ=.*/TZ=${TZ_VAL}/" "$ENV_FILE"
-    echo -e "${GREEN}✓ Timezone updated to ${TZ_VAL}${NC}"
   fi
 fi
 
@@ -156,11 +217,12 @@ if [ -n "$RESET_PASSWORD" ]; then
     echo -e "${GREEN}✓ Password reset successfully.${NC}"
   else
     echo -e "${YELLOW}Container not running. Building and updating hash in .env...${NC}"
-    docker compose build --quiet manejarr
+    docker build -q -t manejarr .
     NEW_HASH=$(docker run --rm manejarr node -e "
       import bcrypt from 'bcrypt';
-      console.log(await bcrypt.hash('${RESET_PASSWORD}', 12));
-    ")
+      const h = await bcrypt.hash('${RESET_PASSWORD}', 12);
+      process.stdout.write(h);
+    " 2>/dev/null || echo "")
 
     if [ -n "$NEW_HASH" ]; then
       sed -i "s|^ADMIN_PASSWORD_HASH=.*|ADMIN_PASSWORD_HASH=${NEW_HASH}|" "$ENV_FILE"

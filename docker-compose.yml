@@ -1,6 +1,7 @@
 services:
   manejarr:
     build: .
+    image: manejarr
     container_name: manejarr
     restart: unless-stopped
     ports:
