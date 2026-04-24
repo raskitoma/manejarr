@@ -64,6 +64,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ── Self-Update & Reload ──
+if [ "$RELOADED" != "true" ] && [ -d ".git" ]; then
+  if docker ps --format '{{.Names}}' | grep -q manejarr; then
+    echo -e "${YELLOW}Manejarr is currently running. Checking for updates...${NC}"
+    
+    if command -v git >/dev/null 2>&1; then
+      echo -e "${CYAN}Pulling latest changes from Git...${NC}"
+      git pull
+      
+      echo -e "${YELLOW}Reloading deployment script...${NC}"
+      export RELOADED=true
+      exec "$0" "$@"
+    else
+      echo -e "${RED}git command not found. Skipping auto-update.${NC}"
+    fi
+  fi
+fi
+
 # ── Generate or Load .env ──
 if [ ! -f "$ENV_FILE" ]; then
   echo -e "${YELLOW}First-run detected. Configuration required.${NC}"
@@ -236,7 +254,7 @@ fi
 # ── Deploy ──
 echo ""
 echo -e "${CYAN}Deploying Manejarr (Production Mode)...${NC}"
-docker compose up -d
+docker compose up -d --build --force-recreate
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
