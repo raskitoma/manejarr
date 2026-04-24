@@ -36,10 +36,11 @@ if (config.isProduction && existsSync(config.distDir)) {
   app.use(express.static(config.distDir));
 
   // SPA fallback — serve index.html for all non-API routes
-  app.get('(.*)', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(resolve(config.distDir, 'index.html'));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(resolve(config.distDir, 'index.html'));
     }
+    next();
   });
 }
 
