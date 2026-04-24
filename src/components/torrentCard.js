@@ -6,17 +6,34 @@ import { formatSize, formatDuration, formatRatio, formatDate, getLabelBadgeClass
 
 export function renderTorrentRow(torrent) {
   const labelClass = getLabelBadgeClass(torrent.label);
+  const managerClass = torrent.manager ? `badge-${torrent.manager.toLowerCase()}` : '';
+  
+  // Skip reason indicator
+  const hasReason = torrent.reason && torrent.reason !== 'Criteria not met';
+  const reasonHtml = hasReason ? `
+    <div class="reason-indicator" title="${torrent.reason}">
+      <span>i</span>
+    </div>
+  ` : '';
+
+  // Metadata for hover
+  const metadataAttr = torrent.metadata ? `data-metadata='${JSON.stringify(torrent.metadata).replace(/'/g, "&apos;")}'` : '';
+  const managerAttr = torrent.manager ? `data-manager="${torrent.manager}"` : '';
 
   return `
-    <tr>
-      <td class="text-primary-col" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${torrent.name}">
-        ${torrent.name}
+    <tr data-hash="${torrent.hash}" ${metadataAttr} ${managerAttr}>
+      <td class="text-primary-col">
+        <div class="torrent-name-wrapper">
+          <span class="torrent-name-text" title="${torrent.name}">${torrent.name}</span>
+          ${reasonHtml}
+        </div>
       </td>
+      <td><span class="badge ${managerClass}">${torrent.manager || '—'}</span></td>
       <td><span class="badge ${labelClass}">${torrent.label || 'none'}</span></td>
-      <td class="text-mono">${formatRatio(torrent.ratio)}</td>
-      <td class="text-mono">${formatDuration(torrent.seedingTime)}</td>
-      <td>${formatSize(torrent.totalSize)}</td>
-      <td>${formatDate(torrent.timeAdded)}</td>
+      <td class="text-mono" data-val="${torrent.ratio}">${formatRatio(torrent.ratio)}</td>
+      <td class="text-mono" data-val="${torrent.seedingTime}">${formatDuration(torrent.seedingTime)}</td>
+      <td data-val="${torrent.totalSize}">${formatSize(torrent.totalSize)}</td>
+      <td data-val="${torrent.timeAdded}">${formatDate(torrent.timeAdded)}</td>
       <td class="text-mono" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;" title="${torrent.trackerHost || ''}">${torrent.trackerHost || '—'}</td>
       <td><span class="badge badge-${torrent.state === 'Seeding' ? 'success' : torrent.state === 'Paused' ? 'warning' : 'info'}">${torrent.state || '—'}</span></td>
     </tr>

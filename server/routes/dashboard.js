@@ -50,15 +50,61 @@ router.get('/', async (req, res) => {
     ];
 
     // Get last run info
-    const recentRuns = getRunLogs(1, 1);
-    const lastRun = recentRuns.rows.length > 0 ? recentRuns.rows[0] : null;
+    const recentRuns = getRunLogs(1, 10); // Check last 10 runs to find a successful one with summary
+    const lastRun = recentRuns.rows.find(r => r.status === 'success' && r.summary);
+    
+    let metadataMap = {};
+    if (lastRun && lastRun.summary) {
+      try {
+        const summary = JSON.parse(lastRun.summary);
+        const details = [
+          ...(summary.phase1?.details || []),
+          ...(summary.phase2?.details || [])
+        ];
+        
+        details.forEach(detail => {
+          if (detail.hash) {
+            metadataMap[detail.hash] = {
+              manager: detail.manager || detail.service,
+              action: detail.action,
+              reason: detail.reason,
+              metadata: detail.metadata,
+              title: detail.title
+            };
+          }
+        });
+      } catch (err) {
+        console.error('[DASHBOARD] Failed to parse last run summary:', err.message);
+      }
+    }
+
+    // Enrich torrents with metadata
+    const enrichedTorrents = allTorrents.map(t => ({
+      ...t,
+      ...(metadataMap[t.hash] || {})
+    }));
 
     // Get run status
     const runStatus = getRunStatus();
 
+    // Get connection info for image loading
+    const connectionInfo = {
+      radarr: {
+        host: getSetting('radarr_host'),
+        port: getSetting('radarr_port') || 7878,
+        apiKey: decrypt(getSetting('radarr_api_key') || ''),
+      },
+      sonarr: {
+        host: getSetting('sonarr_host'),
+        port: getSetting('sonarr_port') || 8989,
+        apiKey: decrypt(getSetting('sonarr_api_key') || ''),
+      }
+    };
+
     res.json({
       configured: true,
-      torrents: allTorrents,
+      torrents: enrichedTorrents,
+      connectionInfo,
       stats: {
         mediaCount: mediaTorrents.length,
         ignoreCount: ignoreTorrents.length,

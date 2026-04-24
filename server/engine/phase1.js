@@ -114,6 +114,13 @@ export async function executePhase1(clients, options = {}, log) {
             action: 'skipped',
             reason: 'No imported files in Radarr',
             service: 'radarr',
+            manager: 'radarr',
+            metadata: {
+              title: movie.title,
+              year: movie.year,
+              images: movie.images,
+              infoUrl: `https://www.imdb.com/title/${movie.imdbId}`,
+            },
           });
           continue;
         }
@@ -140,8 +147,15 @@ export async function executePhase1(clients, options = {}, log) {
             name: torrent.name,
             action: dryRun ? 'would_process' : 'processed',
             service: 'radarr',
+            manager: 'radarr',
             title: movie.title,
             quality: fileQualityName,
+            metadata: {
+              title: movie.title,
+              year: movie.year,
+              images: movie.images,
+              infoUrl: `https://www.imdb.com/title/${movie.imdbId}`,
+            },
           });
           continue;
         }
@@ -181,6 +195,13 @@ export async function executePhase1(clients, options = {}, log) {
             action: 'skipped',
             reason: 'Quality not met',
             service: 'sonarr',
+            manager: 'sonarr',
+            metadata: {
+              title: series.title,
+              year: series.year,
+              images: series.images,
+              infoUrl: `https://www.tvmaze.com/shows/${series.tvMazeId}`,
+            },
           });
           continue;
         }
@@ -209,8 +230,15 @@ export async function executePhase1(clients, options = {}, log) {
             name: torrent.name,
             action: dryRun ? 'would_process' : 'processed',
             service: 'sonarr',
+            manager: 'sonarr',
             title: series.title,
             episodes: episodeIds.length,
+            metadata: {
+              title: series.title,
+              year: series.year,
+              images: series.images,
+              infoUrl: `https://www.tvmaze.com/shows/${series.tvMazeId}`,
+            },
           });
           continue;
         }

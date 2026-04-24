@@ -11,7 +11,11 @@ import { t } from '../utils/i18n.js';
 
 let refreshInterval = null;
 let allTorrents = [];
+let connectionInfo = null;
 let currentDashboardPage = 1;
+let sortField = 'timeAdded';
+let sortDirection = 'desc';
+let searchQuery = '';
 const DASHBOARD_PAGE_SIZE = 10;
 
 export async function renderDashboard() {
@@ -26,6 +30,10 @@ export async function renderDashboard() {
     <div class="section-header">
       <h2 class="section-title">${t('torrent_overview')}</h2>
       <div class="flex items-center gap-md">
+        <div class="search-container">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="torrent-search" class="form-input search-input" placeholder="${t('search')}...">
+        </div>
         <div id="run-buttons"></div>
         <select id="label-filter" class="form-input" style="width: auto; min-width: 140px;">
           <option value="">${t('all_labels')}</option>
@@ -40,18 +48,19 @@ export async function renderDashboard() {
       <table class="table">
         <thead>
           <tr>
-            <th>${t('name')}</th>
-            <th>${t('label')}</th>
-            <th>${t('ratio')}</th>
-            <th>${t('seed_time')}</th>
-            <th>${t('size')}</th>
-            <th>Added</th>
+            <th class="th-sortable" data-sort="name">${t('name')}</th>
+            <th class="th-sortable" data-sort="manager">Manager</th>
+            <th class="th-sortable" data-sort="label">${t('label')}</th>
+            <th class="th-sortable" data-sort="ratio">${t('ratio')}</th>
+            <th class="th-sortable" data-sort="seedingTime">${t('seed_time')}</th>
+            <th class="th-sortable" data-sort="totalSize">${t('size')}</th>
+            <th class="th-sortable" data-sort="timeAdded">${t('added')}</th>
             <th>Tracker</th>
-            <th>State</th>
+            <th class="th-sortable" data-sort="state">State</th>
           </tr>
         </thead>
         <tbody id="torrent-table-body">
-          <tr><td colspan="8" class="text-center text-muted" style="padding: var(--space-2xl);">
+          <tr><td colspan="9" class="text-center text-muted" style="padding: var(--space-2xl);">
             <div class="spinner-lg" style="margin: 0 auto var(--space-md);"></div>
             ${t('connecting')}
           </td></tr>
@@ -61,25 +70,119 @@ export async function renderDashboard() {
     
     <!-- Pagination -->
     <div id="dashboard-pagination" class="pagination"></div>
+
+    <!-- Persistent Hover Card -->
+    <div id="hover-card" class="hover-card"></div>
   `;
 
-  // Render run buttons
-  renderRunButtons('run-buttons', (status) => {
-    if (!status.running) loadDashboardData();
-  });
+  initDashboardEvents();
+  await loadDashboardData();
 
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(loadDashboardData, 30000);
+}
+
+function initDashboardEvents() {
   // Label filter
   document.getElementById('label-filter')?.addEventListener('change', () => {
     currentDashboardPage = 1;
     renderFilteredTorrents();
   });
 
-  // Load data
-  await loadDashboardData();
+  // Search input
+  document.getElementById('torrent-search')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value.toLowerCase();
+    currentDashboardPage = 1;
+    renderFilteredTorrents();
+  });
 
-  // Auto-refresh every 30 seconds
-  if (refreshInterval) clearInterval(refreshInterval);
-  refreshInterval = setInterval(loadDashboardData, 30000);
+  // Sorting
+  document.querySelectorAll('.th-sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      if (sortField === field) {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortField = field;
+        sortDirection = 'asc';
+      }
+      
+      // Update UI classes
+      document.querySelectorAll('.th-sortable').forEach(el => {
+        el.classList.remove('sort-asc', 'sort-desc');
+      });
+      th.classList.add(`sort-${sortDirection}`);
+      
+      renderFilteredTorrents();
+    });
+    
+    // Set initial sort class
+    if (th.dataset.sort === sortField) {
+      th.classList.add(`sort-${sortDirection}`);
+    }
+  });
+
+  // Hover Card Logic
+  const hoverCard = document.getElementById('hover-card');
+  const tableBody = document.getElementById('torrent-table-body');
+  
+  if (tableBody && hoverCard) {
+    tableBody.addEventListener('mouseover', (e) => {
+      const tr = e.target.closest('tr');
+      if (!tr || !tr.dataset.metadata) return;
+
+      try {
+        const metadata = JSON.parse(tr.dataset.metadata);
+        const manager = tr.dataset.manager;
+        
+        // Find poster image
+        const poster = metadata.images?.find(img => img.coverType === 'poster');
+        if (!poster) return;
+
+        let imgUrl = poster.remoteUrl;
+        // If no remote URL, construct local one using connectionInfo
+        if (!imgUrl && connectionInfo?.[manager.toLowerCase()]) {
+          const config = connectionInfo[manager.toLowerCase()];
+          imgUrl = `http://${config.host}:${config.port}${poster.url}${poster.url.includes('?') ? '&' : '?'}apikey=${config.apiKey}`;
+        }
+
+        if (!imgUrl) return;
+
+        hoverCard.innerHTML = `
+          <img src="${imgUrl}" class="hover-card-poster" onerror="this.src='https://placehold.co/200x280?text=No+Poster'">
+          <div class="hover-card-content">
+            <div class="hover-card-title">${metadata.title} (${metadata.year})</div>
+            <div class="hover-card-meta">${manager} &bull; ${metadata.infoUrl ? `<a href="${metadata.infoUrl}" target="_blank">View Info</a>` : ''}</div>
+          </div>
+        `;
+        
+        hoverCard.classList.add('visible');
+        
+        // Position card
+        const rect = tr.getBoundingClientRect();
+        hoverCard.style.top = `${Math.min(window.innerHeight - 380, rect.top)}px`;
+        hoverCard.style.left = `${rect.left + 320}px`;
+
+      } catch (err) {
+        console.error('Hover card error:', err);
+      }
+    });
+
+    tableBody.addEventListener('mouseout', (e) => {
+      const tr = e.target.closest('tr');
+      if (tr) hoverCard.classList.remove('visible');
+    });
+
+    tableBody.addEventListener('mousemove', (e) => {
+      if (!hoverCard.classList.contains('visible')) return;
+      // Optional: follow mouse slightly
+    });
+  }
+
+  // Render run buttons
+  renderRunButtons('run-buttons', (status) => {
+    if (!status.running) loadDashboardData();
+  });
 }
 
 async function loadDashboardData() {
@@ -87,6 +190,7 @@ async function loadDashboardData() {
     const data = await api.get('/dashboard');
 
     allTorrents = data.torrents || [];
+    connectionInfo = data.connectionInfo;
 
     // Update stats
     const grid = document.getElementById('stats-grid');
@@ -119,7 +223,6 @@ async function loadDashboardData() {
     setRunButtonsEnabled(allTorrents.length > 0);
 
   } catch (err) {
-    console.error('[DASHBOARD] Load error:', err);
     if (err.message !== 'Authentication required') {
       showToast('Failed to load dashboard data', 'error');
     }
@@ -127,19 +230,48 @@ async function loadDashboardData() {
 }
 
 function renderFilteredTorrents() {
-  const filter = document.getElementById('label-filter')?.value || '';
-  const filtered = filter ? allTorrents.filter(t => t.label === filter) : allTorrents;
+  const labelFilter = document.getElementById('label-filter')?.value || '';
+  
+  // Apply Filter & Search
+  let filtered = allTorrents.filter(t => {
+    const matchesLabel = !labelFilter || t.label === labelFilter;
+    const matchesSearch = !searchQuery || 
+                          t.name.toLowerCase().includes(searchQuery) || 
+                          (t.trackerHost && t.trackerHost.toLowerCase().includes(searchQuery)) ||
+                          (t.manager && t.manager.toLowerCase().includes(searchQuery));
+    return matchesLabel && matchesSearch;
+  });
+
+  // Apply Sort
+  filtered.sort((a, b) => {
+    let valA = a[sortField];
+    let valB = b[sortField];
+    
+    // Handle string comparison
+    if (typeof valA === 'string') {
+      valA = valA.toLowerCase();
+      valB = (valB || '').toLowerCase();
+    }
+    
+    // Handle nulls
+    if (valA === null || valA === undefined) return 1;
+    if (valB === null || valB === undefined) return -1;
+
+    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   const tbody = document.getElementById('torrent-table-body');
   if (!tbody) return;
 
   if (filtered.length === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="8">
+      <tr><td colspan="9">
         <div class="empty-state">
           <div class="empty-state-icon">📭</div>
           <div class="empty-state-title">No torrents found</div>
-          <div class="empty-state-text">${filter ? `No torrents with label "${filter}".` : 'No tracked torrents in Deluge. Check your settings.'}</div>
+          <div class="empty-state-text">${labelFilter || searchQuery ? 'No items match your filters.' : 'No tracked torrents in Deluge.'}</div>
         </div>
       </td></tr>
     `;
@@ -147,21 +279,14 @@ function renderFilteredTorrents() {
     return;
   }
 
-  // Calculate slice for current page
   const totalItems = filtered.length;
   const totalPages = Math.ceil(totalItems / DASHBOARD_PAGE_SIZE);
-  
-  // Ensure current page is valid
-  if (currentDashboardPage > totalPages) {
-    currentDashboardPage = Math.max(1, totalPages);
-  }
+  if (currentDashboardPage > totalPages) currentDashboardPage = Math.max(1, totalPages);
   
   const startIndex = (currentDashboardPage - 1) * DASHBOARD_PAGE_SIZE;
-  const endIndex = startIndex + DASHBOARD_PAGE_SIZE;
-  const pageItems = filtered.slice(startIndex, endIndex);
+  const pageItems = filtered.slice(startIndex, startIndex + DASHBOARD_PAGE_SIZE);
 
   tbody.innerHTML = pageItems.map(renderTorrentRow).join('');
-  
   renderDashboardPagination(totalItems);
 }
 
@@ -176,24 +301,17 @@ function renderDashboardPagination(totalItems) {
   }
 
   let buttons = '';
-
-  // Previous
   buttons += `<button class="pagination-btn" ${currentDashboardPage <= 1 ? 'disabled' : ''} data-dpage="${currentDashboardPage - 1}">‹</button>`;
 
-  // Page numbers (show up to 5)
   const start = Math.max(1, currentDashboardPage - 2);
   const end = Math.min(totalPages, start + 4);
-
   for (let i = start; i <= end; i++) {
     buttons += `<button class="pagination-btn ${i === currentDashboardPage ? 'active' : ''}" data-dpage="${i}">${i}</button>`;
   }
 
-  // Next
   buttons += `<button class="pagination-btn" ${currentDashboardPage >= totalPages ? 'disabled' : ''} data-dpage="${currentDashboardPage + 1}">›</button>`;
-
   pDiv.innerHTML = buttons + `<span class="pagination-info">${totalItems} total</span>`;
 
-  // Wire up page buttons
   pDiv.querySelectorAll('[data-dpage]').forEach(btn => {
     btn.addEventListener('click', () => {
       currentDashboardPage = parseInt(btn.dataset.dpage, 10);

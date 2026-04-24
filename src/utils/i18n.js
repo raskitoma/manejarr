@@ -31,6 +31,8 @@ const DICTIONARY = {
     run_now: 'Run Now',
     dry_run: 'Dry Run',
     running: 'Running...',
+    search: 'Search',
+    added: 'Added',
 
     // Settings
     services: 'Services',
@@ -142,6 +144,8 @@ const DICTIONARY = {
     run_now: 'Ejecutar Ahora',
     dry_run: 'Simulacro',
     running: 'Ejecutando...',
+    search: 'Buscar',
+    added: 'Añadido',
 
     // Settings
     services: 'Servicios',

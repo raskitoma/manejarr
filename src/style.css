@@ -1349,3 +1349,137 @@ select.form-input option {
     border-radius: var(--radius-lg);
   }
 }
+
+/* ── Enriched Torrent Dashboard Styles ── */
+
+.th-sortable {
+  cursor: pointer;
+  position: relative;
+  transition: color var(--transition-fast);
+}
+
+.th-sortable:hover {
+  color: var(--text-primary);
+  background: var(--bg-glass-hover) !important;
+}
+
+.th-sortable::after {
+  content: '↕';
+  margin-left: var(--space-xs);
+  opacity: 0.2;
+  font-size: 0.7rem;
+}
+
+.th-sortable.sort-asc::after {
+  content: '↑';
+  opacity: 1;
+  color: var(--accent-primary);
+}
+
+.th-sortable.sort-desc::after {
+  content: '↓';
+  opacity: 1;
+  color: var(--accent-primary);
+}
+
+.torrent-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  position: relative;
+  max-width: 300px;
+}
+
+.torrent-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  cursor: help;
+}
+
+.reason-indicator {
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  cursor: help;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-glass);
+  transition: all var(--transition-fast);
+}
+
+.reason-indicator:hover {
+  background: var(--bg-glass-hover);
+  color: var(--status-warning);
+}
+
+/* Hover Poster Card */
+.hover-card {
+  position: fixed;
+  z-index: 1000;
+  width: 200px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(99, 102, 241, 0.2);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity var(--transition-base), transform var(--transition-base);
+  backdrop-filter: blur(12px);
+}
+
+.hover-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hover-card-poster {
+  width: 100%;
+  height: 280px;
+  object-fit: cover;
+  background: var(--bg-tertiary);
+}
+
+.hover-card-content {
+  padding: var(--space-md);
+}
+
+.hover-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+  line-height: 1.3;
+}
+
+.hover-card-meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+/* Manager Badges */
+.badge-radarr { background: rgba(255, 165, 0, 0.15); color: #ffa500; }
+.badge-sonarr { background: rgba(0, 188, 212, 0.15); color: #00bcd4; }
+
+.search-container {
+  position: relative;
+  width: 300px;
+}
+
+.search-input {
+  padding-left: 2.5rem !important;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.8rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
