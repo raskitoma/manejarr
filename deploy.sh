@@ -193,17 +193,17 @@ else
 
   # Apply flag-based overrides and update .env
   if [ -n "$PORT" ]; then
-    sed -i "s/^PORT=.*/PORT=${PORT}/" "$ENV_FILE"
+    sed -i "s|^PORT=.*|PORT=${PORT}|" "$ENV_FILE"
   fi
   if [ -n "$TZ_VAL" ]; then
-    sed -i "s/^TZ=.*/TZ=${TZ_VAL}/" "$ENV_FILE"
+    sed -i "s|^TZ=.*|TZ=${TZ_VAL}|" "$ENV_FILE"
   fi
 fi
 
 # ── Force Regenerate Encryption Key ──
 if [ "$GENERATE_KEY" = true ]; then
   NEW_KEY=$(openssl rand -hex 32)
-  sed -i "s/^ENCRYPTION_KEY=.*/ENCRYPTION_KEY=${NEW_KEY}/" "$ENV_FILE"
+  sed -i "s|^ENCRYPTION_KEY=.*|ENCRYPTION_KEY=${NEW_KEY}|" "$ENV_FILE"
   echo -e "${YELLOW}⚠ Encryption key regenerated. Existing encrypted settings will be invalid.${NC}"
 fi
 
@@ -248,3 +248,6 @@ echo -e "  URL: ${CYAN}http://localhost:${PORT:-3000}${NC}"
 echo -e "  User: ${YELLOW}${ADMIN_USERNAME:-admin}${NC}"
 echo -e "  TZ: ${CYAN}${TZ:-UTC}${NC}"
 echo ""
+
+echo -e "${CYAN}Streaming logs (Ctrl+C to stop viewing, service will remain running)...${NC}"
+docker compose logs -f
