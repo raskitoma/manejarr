@@ -32,7 +32,7 @@ Manejarr is a high-performance, containerized service-to-service orchestration l
 ### Deploy in Seconds
 
 ```bash
-git clone https://github.com/your-username/manejarr.git
+git clone https://github.com/raskitoma/manejarr.git
 cd manejarr
 chmod +x deploy.sh
 ./deploy.sh
