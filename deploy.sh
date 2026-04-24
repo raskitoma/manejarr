@@ -75,7 +75,7 @@ if [ "$RELOADED" != "true" ] && [ -d ".git" ]; then
       
       echo -e "${YELLOW}Reloading deployment script...${NC}"
       export RELOADED=true
-      exec "$0" "$@"
+      exec bash "$0" "$@"
     else
       echo -e "${RED}git command not found. Skipping auto-update.${NC}"
     fi
