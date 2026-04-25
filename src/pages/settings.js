@@ -30,7 +30,6 @@ export async function renderSettings() {
               <div class="service-icon" style="background: rgba(52, 152, 219, 0.15); color: #3498db;">⚡</div>
               <span>Deluge</span>
             </div>
-            <button class="btn btn-sm btn-secondary" id="test-deluge-btn">${t('save_test')}</button>
           </div>
           <div class="card">
             <div class="form-row-3">
@@ -47,7 +46,10 @@ export async function renderSettings() {
                 <input type="password" id="deluge_password" class="form-input" placeholder="${t('password')}" />
               </div>
             </div>
-            <div id="deluge-test-result" class="mt-md"></div>
+            <div class="flex items-center justify-between mt-md">
+              <div id="deluge-test-result"></div>
+              <button class="btn btn-sm btn-secondary" id="test-deluge-btn">${t('save_test')}</button>
+            </div>
           </div>
         </div>
 
@@ -58,7 +60,6 @@ export async function renderSettings() {
               <div class="service-icon" style="background: rgba(255, 165, 0, 0.15); color: #ffa500;">🎬</div>
               <span>Radarr</span>
             </div>
-            <button class="btn btn-sm btn-secondary" id="test-radarr-btn">${t('save_test')}</button>
           </div>
           <div class="card">
             <div class="form-row-3">
@@ -75,7 +76,10 @@ export async function renderSettings() {
                 <input type="password" id="radarr_api_key" class="form-input form-input-mono" placeholder="${t('api_key')}" />
               </div>
             </div>
-            <div id="radarr-test-result" class="mt-md"></div>
+            <div class="flex items-center justify-between mt-md">
+              <div id="radarr-test-result"></div>
+              <button class="btn btn-sm btn-secondary" id="test-radarr-btn">${t('save_test')}</button>
+            </div>
           </div>
         </div>
 
@@ -86,7 +90,6 @@ export async function renderSettings() {
               <div class="service-icon" style="background: rgba(46, 204, 113, 0.15); color: #2ecc71;">📺</div>
               <span>Sonarr</span>
             </div>
-            <button class="btn btn-sm btn-secondary" id="test-sonarr-btn">${t('save_test')}</button>
           </div>
           <div class="card">
             <div class="form-row-3">
@@ -103,7 +106,10 @@ export async function renderSettings() {
                 <input type="password" id="sonarr_api_key" class="form-input form-input-mono" placeholder="${t('api_key')}" />
               </div>
             </div>
-            <div id="sonarr-test-result" class="mt-md"></div>
+            <div class="flex items-center justify-between mt-md">
+              <div id="sonarr-test-result"></div>
+              <button class="btn btn-sm btn-secondary" id="test-sonarr-btn">${t('save_test')}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -116,7 +122,6 @@ export async function renderSettings() {
               <div class="service-icon" style="background: rgba(231, 76, 60, 0.15); color: #e74c3c;">⚖️</div>
               <span>Orchestration Rules</span>
             </div>
-            <button class="btn btn-sm btn-primary" id="save-rules-btn">${t('save_rules')}</button>
           </div>
           <div class="card">
             <div class="form-row-3">
@@ -133,6 +138,9 @@ export async function renderSettings() {
                 <input type="number" id="log_retention_days" class="form-input" step="1" placeholder="30" />
               </div>
             </div>
+            <div class="flex justify-end mt-md">
+              <button class="btn btn-sm btn-primary" id="save-rules-btn">${t('save_rules')}</button>
+            </div>
           </div>
         </div>
       </div> </div>
@@ -148,7 +156,6 @@ export async function renderSettings() {
               <span>Email Notifications</span>
             </div>
             <div class="flex items-center gap-md">
-              <button class="btn btn-sm btn-secondary" id="test-email-btn" title="Save and send a test email">${t('save_test')}</button>
               <div class="flex items-center gap-sm">
                 <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">${t('enable_email')}</span>
                 <label class="toggle-switch" for="notify_email_enabled">
@@ -187,7 +194,10 @@ export async function renderSettings() {
                 <input type="email" id="notify_email_to" class="form-input" placeholder="you@gmail.com" />
               </div>
             </div>
-            <div id="email-test-result" class="mt-md"></div>
+            <div class="flex items-center justify-between mt-md">
+              <div id="email-test-result"></div>
+              <button class="btn btn-sm btn-secondary" id="test-email-btn" title="Save and send a test email">${t('save_test')}</button>
+            </div>
           </div>
         </div>
 
@@ -199,7 +209,6 @@ export async function renderSettings() {
               <span>Telegram Notifications</span>
             </div>
             <div class="flex items-center gap-md">
-              <button class="btn btn-sm btn-secondary" id="test-telegram-btn" title="Save and send a test message">${t('save_test')}</button>
               <div class="flex items-center gap-sm">
                 <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">${t('enable_telegram')}</span>
                 <label class="toggle-switch" for="notify_telegram_enabled">
@@ -221,7 +230,10 @@ export async function renderSettings() {
                 <span class="form-hint">Use "channelId/topicId" for topic-based groups</span>
               </div>
             </div>
-            <div id="telegram-test-result" class="mt-md"></div>
+            <div class="flex items-center justify-between mt-md">
+              <div id="telegram-test-result"></div>
+              <button class="btn btn-sm btn-secondary" id="test-telegram-btn" title="Save and send a test message">${t('save_test')}</button>
+            </div>
           </div>
         </div>
       </div>
