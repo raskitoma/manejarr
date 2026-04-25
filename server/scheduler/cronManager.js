@@ -9,6 +9,7 @@
 import cron from 'node-cron';
 import { getSchedules } from '../db/database.js';
 import { runFull } from '../engine/orchestrator.js';
+import { runMaintenance } from '../engine/maintenance.js';
 
 // Active cron job instances keyed by schedule ID
 const activeJobs = new Map();
@@ -21,7 +22,7 @@ export function initScheduler() {
 
   for (const schedule of schedules) {
     if (schedule.enabled) {
-      addCronJob(schedule.id, schedule.cron_expr);
+      addCronJob(schedule.id, schedule.cron_expr, schedule.task_type);
     }
   }
 
@@ -31,7 +32,7 @@ export function initScheduler() {
 /**
  * Register a new cron job for a schedule.
  */
-export function addCronJob(scheduleId, cronExpr) {
+export function addCronJob(scheduleId, cronExpr, taskType = 'run') {
   // Remove existing job if any
   removeCronJob(scheduleId);
 
@@ -42,12 +43,16 @@ export function addCronJob(scheduleId, cronExpr) {
   }
 
   const job = cron.schedule(cronExpr, async () => {
-    console.log(`[SCHEDULER] Triggering scheduled run (schedule ${scheduleId})`);
+    console.log(`[SCHEDULER] Triggering scheduled task "${taskType}" (schedule ${scheduleId})`);
 
     try {
-      await runFull({ runType: 'scheduled' });
+      if (taskType === 'compact') {
+        await runMaintenance();
+      } else {
+        await runFull({ runType: 'scheduled' });
+      }
     } catch (err) {
-      console.error(`[SCHEDULER] Scheduled run failed:`, err.message);
+      console.error(`[SCHEDULER] Scheduled task "${taskType}" failed:`, err.message);
     }
   }, {
     timezone: process.env.TZ || 'UTC',
@@ -73,9 +78,9 @@ export function removeCronJob(scheduleId) {
 /**
  * Update a cron job (re-register with new expression or enable/disable).
  */
-export function updateCronJob(scheduleId, cronExpr, enabled) {
+export function updateCronJob(scheduleId, cronExpr, enabled, taskType = 'run') {
   if (enabled) {
-    addCronJob(scheduleId, cronExpr);
+    addCronJob(scheduleId, cronExpr, taskType);
   } else {
     removeCronJob(scheduleId);
   }

@@ -28,7 +28,12 @@ export function renderTorrentRow(torrent) {
           ${reasonHtml}
         </div>
       </td>
-      <td><span class="badge ${managerClass}">${torrent.manager || '—'}</span></td>
+      <td>
+        ${torrent.managerUrl 
+          ? `<a href="${torrent.managerUrl}" target="_blank" class="badge-link"><span class="badge ${managerClass}">${torrent.manager}</span></a>`
+          : `<span class="badge ${managerClass}">${torrent.manager || '—'}</span>`
+        }
+      </td>
       <td><span class="badge ${labelClass}">${torrent.label || 'none'}</span></td>
       <td class="text-mono" data-val="${torrent.ratio}">${formatRatio(torrent.ratio)}</td>
       <td class="text-mono" data-val="${torrent.seedingTime}">${formatDuration(torrent.seedingTime)}</td>

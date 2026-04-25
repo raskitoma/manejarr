@@ -19,6 +19,7 @@ export async function renderSettings() {
         <button class="tab-btn" data-tab="rules">${t('rules')}</button>
         <button class="tab-btn" data-tab="notifications">${t('notifications')}</button>
         <button class="tab-btn" data-tab="account">${t('account')}</button>
+        <button class="tab-btn" data-tab="extras">Extras</button>
       </div>
 
       <!-- Services Tab -->
@@ -274,6 +275,28 @@ export async function renderSettings() {
           </div>
         </div>
       </div>
+      
+      <!-- Extras Tab -->
+      <div id="tab-extras" class="tab-pane">
+        <div class="service-section">
+          <div class="service-header">
+            <div class="service-title">
+              <div class="service-icon" style="background: rgba(139, 92, 246, 0.15); color: #8b5cf6;">🛠️</div>
+              <span>Maintenance</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="form-label" style="margin-bottom: 4px;">Compact Database</div>
+                <div class="text-secondary" style="font-size: 0.85rem;">Remove cached metadata for torrents that are no longer in Deluge.</div>
+              </div>
+              <button class="btn btn-secondary" id="compact-db-btn">🚀 Compact Now</button>
+            </div>
+            <div id="compact-result" class="mt-md"></div>
+          </div>
+        </div>
+      </div>
 
     </div>
   `;
@@ -319,6 +342,33 @@ export async function renderSettings() {
 
   document.getElementById('change-password-btn')?.addEventListener('click', changePassword);
   document.getElementById('new_password')?.addEventListener('input', updatePasswordStrength);
+  document.getElementById('compact-db-btn')?.addEventListener('click', compactDatabaseUI);
+}
+
+async function compactDatabaseUI() {
+  const btn = document.getElementById('compact-db-btn');
+  const resultDiv = document.getElementById('compact-result');
+  
+  btn.disabled = true;
+  btn.textContent = 'Compacting...';
+  resultDiv.innerHTML = '<span class="text-muted">Analyzing database...</span>';
+  
+  try {
+    const res = await api.post('/settings/compact');
+    if (res.success) {
+      showToast(`Database compacted! Removed ${res.deleted} stale items.`, 'success');
+      resultDiv.innerHTML = `<span class="text-success">✓ Success: Removed ${res.deleted} stale metadata items.</span>`;
+    } else {
+      showToast(res.error || 'Failed to compact database', 'error');
+      resultDiv.innerHTML = `<span class="text-error">✕ ${res.error}</span>`;
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+    resultDiv.innerHTML = `<span class="text-error">✕ ${err.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 Compact Now';
+  }
 }
 
 function updatePasswordStrength(e) {

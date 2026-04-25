@@ -63,25 +63,32 @@ function renderSchedulesList(schedules) {
     return;
   }
 
-  list.innerHTML = schedules.map(s => `
-    <div class="schedule-card" data-id="${s.id}">
-      <div class="schedule-info">
-        <div class="schedule-name">${s.name}</div>
-        <div style="color: var(--text-secondary); margin-bottom: 4px;">Cron: <code style="color: var(--accent-tertiary);">${s.cron_expr}</code></div>
-        <div class="text-muted" style="font-size: 0.85rem;">${formatCron(s.cron_expr)}</div>
-      </div>
-      <div class="schedule-actions">
-        <label class="toggle">
-          <input type="checkbox" ${s.enabled ? 'checked' : ''} data-toggle-id="${s.id}" />
-          <span class="toggle-slider"></span>
-        </label>
-        <div class="flex gap-sm">
-          <button class="btn btn-sm btn-secondary" onclick="window.editSchedule(${s.id})">${t('edit')}</button>
-          <button class="btn btn-sm" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);" onclick="window.deleteSchedule(${s.id})">${t('delete')}</button>
+  list.innerHTML = schedules.map(s => {
+    const isMaintenance = s.task_type === 'compact';
+    const systemBadge = isMaintenance ? `<span class="badge badge-info" style="font-size: 0.65rem; margin-left: 8px; vertical-align: middle;">System</span>` : '';
+    
+    return `
+      <div class="schedule-card" data-id="${s.id}">
+        <div class="schedule-info">
+          <div class="schedule-name">${s.name} ${systemBadge}</div>
+          <div style="color: var(--text-secondary); margin-bottom: 4px;">Cron: <code style="color: var(--accent-tertiary);">${s.cron_expr}</code></div>
+          <div class="text-muted" style="font-size: 0.85rem;">${formatCron(s.cron_expr)}</div>
+        </div>
+        <div class="schedule-actions">
+          ${isMaintenance ? '' : `
+            <label class="toggle">
+              <input type="checkbox" ${s.enabled ? 'checked' : ''} data-toggle-id="${s.id}" />
+              <span class="toggle-slider"></span>
+            </label>
+          `}
+          <div class="flex gap-sm">
+            <button class="btn btn-sm btn-secondary" ${isMaintenance ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="window.editSchedule(${s.id})">${t('edit')}</button>
+            <button class="btn btn-sm" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); ${isMaintenance ? 'opacity: 0.5; cursor: not-allowed;' : ''}" ${isMaintenance ? 'disabled' : ''} onclick="window.deleteSchedule(${s.id})">${t('delete')}</button>
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   // Wire up toggles
   list.querySelectorAll('[data-toggle-id]').forEach(toggle => {

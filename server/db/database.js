@@ -31,7 +31,28 @@ export async function initDatabase() {
   const schema = readFileSync(resolve(__dirname, 'schema.sql'), 'utf-8');
   db.run(schema);
 
-  // Persist after schema init
+  // Migrations
+  try {
+    // 1. Add task_type column if missing (upgrades)
+    db.run("ALTER TABLE schedules ADD COLUMN task_type TEXT DEFAULT 'run'");
+    console.log('[DB] Migration: Added task_type to schedules');
+  } catch (e) {
+    // Column likely already exists
+  }
+
+  // 2. Ensure default Maintenance task exists
+  try {
+    // We check if it exists using a plain query first to avoid reference errors if column missing (shouldn't be)
+    db.run(`
+      INSERT INTO schedules (name, task_type, cron_expr, enabled) 
+      SELECT 'Weekly Maintenance', 'compact', '0 3 * * 0', 1
+      WHERE NOT EXISTS (SELECT 1 FROM schedules WHERE task_type = 'compact')
+    `);
+  } catch (e) {
+    console.warn('[DB] Failed to ensure default maintenance task:', e.message);
+  }
+
+  // Persist after migrations
   saveDatabase();
 
   console.log('[DB] Database initialized at', config.dbPath);
@@ -244,10 +265,10 @@ export function getSchedule(id) {
   return null;
 }
 
-export function insertSchedule(name, cronExpr) {
+export function insertSchedule(name, cronExpr, taskType = 'run') {
   db.run(
-    'INSERT INTO schedules (name, cron_expr) VALUES (?, ?)',
-    [name, cronExpr]
+    'INSERT INTO schedules (name, cron_expr, task_type) VALUES (?, ?, ?)',
+    [name, cronExpr, taskType]
   );
   saveDatabase();
 
@@ -274,6 +295,10 @@ export function updateSchedule(id, data) {
     fields.push('enabled = ?');
     params.push(data.enabled ? 1 : 0);
   }
+  if (data.task_type !== undefined) {
+    fields.push('task_type = ?');
+    params.push(data.task_type);
+  }
 
   fields.push("updated_at = datetime('now')");
   params.push(id);
@@ -285,4 +310,54 @@ export function updateSchedule(id, data) {
 export function deleteSchedule(id) {
   db.run('DELETE FROM schedules WHERE id = ?', [id]);
   saveDatabase();
+}
+
+// ── Torrent Metadata helpers ──
+
+export function updateTorrentMetadata(hash, data) {
+  const { manager, title, metadata } = data;
+  db.run(
+    'INSERT INTO torrent_metadata (hash, manager, title, metadata) VALUES (?, ?, ?, ?) ON CONFLICT(hash) DO UPDATE SET manager = ?, title = ?, metadata = ?, updated_at = datetime(\'now\')',
+    [hash, manager, title, JSON.stringify(metadata), manager, title, JSON.stringify(metadata)]
+  );
+  saveDatabase();
+}
+
+export function getAllTorrentMetadata() {
+  const stmt = db.prepare('SELECT * FROM torrent_metadata');
+  const results = {};
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    results[row.hash] = {
+      ...row,
+      metadata: row.metadata ? JSON.parse(row.metadata) : null
+    };
+  }
+  stmt.free();
+  return results;
+}
+
+/**
+ * Clear metadata for hashes that are no longer present in the provided list.
+ */
+export function compactDatabase(activeHashes) {
+  if (!activeHashes || !Array.isArray(activeHashes)) return { deleted: 0 };
+  
+  const placeholders = activeHashes.map(() => '?').join(',');
+  const stmt = db.prepare(`SELECT hash FROM torrent_metadata WHERE hash NOT IN (${placeholders})`);
+  stmt.bind(activeHashes);
+  
+  const hashesToDelete = [];
+  while (stmt.step()) {
+    hashesToDelete.push(stmt.getAsObject().hash);
+  }
+  stmt.free();
+
+  if (hashesToDelete.length > 0) {
+    const delPlaceholders = hashesToDelete.map(() => '?').join(',');
+    db.run(`DELETE FROM torrent_metadata WHERE hash IN (${delPlaceholders})`, hashesToDelete);
+    saveDatabase();
+  }
+
+  return { deleted: hashesToDelete.length };
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import config from '../config.js';
-import { getSetting, setSetting, getAllSettings } from '../db/database.js';
+import { getSetting, setSetting, getAllSettings, compactDatabase } from '../db/database.js';
 import { encrypt, decrypt, isEncrypted } from '../crypto/encryption.js';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
@@ -197,6 +197,21 @@ router.post('/password', async (req, res) => {
     res.json({ success: true, message: 'Password updated successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error while updating password' });
+  }
+});
+
+import { runMaintenance } from '../engine/maintenance.js';
+
+/**
+ * POST /api/settings/compact
+ * Remove metadata for torrents that are no longer in Deluge.
+ */
+router.post('/compact', async (req, res) => {
+  try {
+    const result = await runMaintenance();
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

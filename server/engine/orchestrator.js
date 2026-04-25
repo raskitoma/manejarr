@@ -16,7 +16,8 @@ import {
   insertRunLog,
   updateRunLog,
   insertEventLog,
-  cleanupOldLogs
+  cleanupOldLogs,
+  updateTorrentMetadata
 } from '../db/database.js';
 import { notifyRunComplete } from '../notifications/notifier.js';
 
@@ -128,9 +129,12 @@ export async function runFull(options = {}) {
     const minSeedingTime = parseInt(getSetting('min_seeding_time'), 10) || 259200; // 3 days
     const minRatio = parseFloat(getSetting('min_ratio')) || 1.1;
 
+    // Get existing persistent metadata to avoid re-matching
+    const existingMetadata = getAllTorrentMetadata();
+
     // ── Phase 1: Verification & Monitoring ──
     log('info', 'engine', '═══ Phase 1: Verification & Monitoring ═══');
-    const phase1Result = await executePhase1(clients, { dryRun }, log);
+    const phase1Result = await executePhase1(clients, { dryRun, existingMetadata }, log);
 
     // ── Phase 2: Retention & Cleanup ──
     log('info', 'engine', '═══ Phase 2: Retention & Cleanup ═══');
@@ -152,6 +156,23 @@ export async function runFull(options = {}) {
 
     // Update run log
     updateRunLog(runId, 'success', JSON.stringify(summary));
+
+    // Update persistent metadata for discovered torrents
+    if (phase1Result.details) {
+      for (const detail of phase1Result.details) {
+        if (detail.hash && detail.manager && detail.metadata) {
+          try {
+            updateTorrentMetadata(detail.hash, {
+              manager: detail.manager,
+              title: detail.title || detail.metadata.title,
+              metadata: detail.metadata
+            });
+          } catch (e) {
+            console.error('[ENGINE] Failed to update persistent metadata:', e.message);
+          }
+        }
+      }
+    }
 
     // Send notification (fire-and-forget — don't let notification failure crash the run)
     notifyRunComplete(summary).catch(err => {

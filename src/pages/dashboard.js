@@ -125,57 +125,89 @@ function initDashboardEvents() {
   // Hover Card Logic
   const hoverCard = document.getElementById('hover-card');
   const tableBody = document.getElementById('torrent-table-body');
+  let hideTimeout = null;
   
   if (tableBody && hoverCard) {
+    const showCard = (metadata, manager, targetTr) => {
+      if (hideTimeout) clearTimeout(hideTimeout);
+      
+      // Find poster image
+      const poster = metadata.images?.find(img => img.coverType === 'poster');
+      if (!poster) return;
+
+      let imgUrl = poster.remoteUrl;
+      // If no remote URL, construct local one using connectionInfo
+      if (!imgUrl && connectionInfo?.[manager.toLowerCase()]) {
+        const config = connectionInfo[manager.toLowerCase()];
+        imgUrl = `http://${config.host}:${config.port}${poster.url}${poster.url.includes('?') ? '&' : '?'}apikey=${config.apiKey}`;
+      }
+
+      if (!imgUrl) return;
+
+      hoverCard.innerHTML = `
+        <img src="${imgUrl}" class="hover-card-poster" onerror="this.src='https://placehold.co/200x280?text=No+Poster'">
+        <div class="hover-card-content">
+          <div class="hover-card-title">${metadata.title} (${metadata.year || 'N/A'})</div>
+          <div class="hover-card-meta">${manager} &bull; ${metadata.infoUrl ? `<a href="${metadata.infoUrl}" target="_blank">View Info</a>` : ''}</div>
+        </div>
+      `;
+      
+      hoverCard.classList.add('visible');
+      
+      // Position card
+      const rect = targetTr.getBoundingClientRect();
+      const cardHeight = 380;
+      const cardWidth = 200;
+      let top = rect.top;
+      let left = rect.left + 300;
+
+      // Adjust if off screen
+      if (top + cardHeight > window.innerHeight) top = window.innerHeight - cardHeight - 20;
+      if (left + cardWidth > window.innerWidth) left = rect.left - cardWidth - 20;
+
+      hoverCard.style.top = `${top}px`;
+      hoverCard.style.left = `${left}px`;
+    };
+
+    const hideCard = () => {
+      hideTimeout = setTimeout(() => {
+        hoverCard.classList.remove('visible');
+      }, 300);
+    };
+
     tableBody.addEventListener('mouseover', (e) => {
       const tr = e.target.closest('tr');
       if (!tr || !tr.dataset.metadata) return;
+      
+      // If we are already showing this TR, do nothing
+      if (hoverCard.classList.contains('visible') && hoverCard.dataset.currentTr === tr.dataset.hash) {
+        if (hideTimeout) clearTimeout(hideTimeout);
+        return;
+      }
 
       try {
         const metadata = JSON.parse(tr.dataset.metadata);
         const manager = tr.dataset.manager;
-        
-        // Find poster image
-        const poster = metadata.images?.find(img => img.coverType === 'poster');
-        if (!poster) return;
-
-        let imgUrl = poster.remoteUrl;
-        // If no remote URL, construct local one using connectionInfo
-        if (!imgUrl && connectionInfo?.[manager.toLowerCase()]) {
-          const config = connectionInfo[manager.toLowerCase()];
-          imgUrl = `http://${config.host}:${config.port}${poster.url}${poster.url.includes('?') ? '&' : '?'}apikey=${config.apiKey}`;
-        }
-
-        if (!imgUrl) return;
-
-        hoverCard.innerHTML = `
-          <img src="${imgUrl}" class="hover-card-poster" onerror="this.src='https://placehold.co/200x280?text=No+Poster'">
-          <div class="hover-card-content">
-            <div class="hover-card-title">${metadata.title} (${metadata.year})</div>
-            <div class="hover-card-meta">${manager} &bull; ${metadata.infoUrl ? `<a href="${metadata.infoUrl}" target="_blank">View Info</a>` : ''}</div>
-          </div>
-        `;
-        
-        hoverCard.classList.add('visible');
-        
-        // Position card
-        const rect = tr.getBoundingClientRect();
-        hoverCard.style.top = `${Math.min(window.innerHeight - 380, rect.top)}px`;
-        hoverCard.style.left = `${rect.left + 320}px`;
-
-      } catch (err) {
-        console.error('Hover card error:', err);
-      }
+        showCard(metadata, manager, tr);
+        hoverCard.dataset.currentTr = tr.dataset.hash;
+      } catch (err) {}
     });
 
     tableBody.addEventListener('mouseout', (e) => {
-      const tr = e.target.closest('tr');
-      if (tr) hoverCard.classList.remove('visible');
+      // Only hide if we are leaving the TR (to nothing or outside tableBody)
+      const toElement = e.relatedTarget;
+      if (toElement && toElement.closest('tr') === e.target.closest('tr')) {
+        return; // Still in same row
+      }
+      hideCard();
     });
 
-    tableBody.addEventListener('mousemove', (e) => {
-      if (!hoverCard.classList.contains('visible')) return;
-      // Optional: follow mouse slightly
+    hoverCard.addEventListener('mouseover', () => {
+      if (hideTimeout) clearTimeout(hideTimeout);
+    });
+
+    hoverCard.addEventListener('mouseout', () => {
+      hideCard();
     });
   }
 

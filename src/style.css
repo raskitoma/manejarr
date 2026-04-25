@@ -1441,7 +1441,6 @@ select.form-input option {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg), 0 0 30px rgba(99, 102, 241, 0.2);
   overflow: hidden;
-  pointer-events: none;
   opacity: 0;
   transform: translateY(10px);
   transition: opacity var(--transition-base), transform var(--transition-base);
@@ -1479,6 +1478,8 @@ select.form-input option {
 /* Manager Badges */
 .badge-radarr { background: rgba(255, 165, 0, 0.15); color: #ffa500; }
 .badge-sonarr { background: rgba(0, 188, 212, 0.15); color: #00bcd4; }
+.badge-link { text-decoration: none; transition: transform 0.2s ease; display: inline-block; }
+.badge-link:hover { transform: scale(1.05); }
 
 .search-container {
   position: relative;

@@ -34,16 +34,16 @@ router.get('/', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { name, cron_expr } = req.body;
+    const { name, cron_expr, task_type = 'run' } = req.body;
 
     if (!name || !cron_expr) {
       return res.status(400).json({ error: 'Name and cron expression are required' });
     }
 
-    const id = insertSchedule(name, cron_expr);
+    const id = insertSchedule(name, cron_expr, task_type);
 
     // Register the cron job
-    addCronJob(id, cron_expr);
+    addCronJob(id, cron_expr, task_type);
 
     const schedule = getSchedule(id);
     res.status(201).json(schedule);
@@ -70,7 +70,7 @@ router.put('/:id', (req, res) => {
 
     // Update the cron job
     const updated = getSchedule(parseInt(id, 10));
-    updateCronJob(parseInt(id, 10), updated.cron_expr, updated.enabled);
+    updateCronJob(parseInt(id, 10), updated.cron_expr, updated.enabled, updated.task_type);
 
     res.json(updated);
   } catch (err) {
@@ -119,7 +119,7 @@ router.patch('/:id/toggle', (req, res) => {
     updateSchedule(parseInt(id, 10), { enabled });
     const updated = getSchedule(parseInt(id, 10));
 
-    updateCronJob(parseInt(id, 10), updated.cron_expr, updated.enabled);
+    updateCronJob(parseInt(id, 10), updated.cron_expr, updated.enabled, updated.task_type);
 
     res.json(updated);
   } catch (err) {

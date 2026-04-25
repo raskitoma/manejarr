@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS schedules (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
+    task_type  TEXT DEFAULT 'run',
     cron_expr  TEXT NOT NULL,
     enabled    INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
@@ -36,4 +37,14 @@ CREATE TABLE IF NOT EXISTS event_logs (
     message    TEXT NOT NULL,
     metadata   TEXT,
     created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Persistent torrent metadata (discovered during runs)
+CREATE TABLE IF NOT EXISTS torrent_metadata (
+    hash       TEXT PRIMARY KEY,
+    manager    TEXT NOT NULL,
+    title      TEXT,
+    metadata   TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 );

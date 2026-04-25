@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
-import { getSetting, getRunLogs } from '../db/database.js';
+import { getSetting, getRunLogs, getAllTorrentMetadata } from '../db/database.js';
 import { decrypt } from '../crypto/encryption.js';
 import { getRunStatus } from '../engine/orchestrator.js';
 import { getConnectionStatus } from '../monitors/healthCheck.js';
@@ -49,11 +49,14 @@ router.get('/', async (req, res) => {
       ...forDeletionTorrents,
     ];
 
-    // Get last run info
-    const recentRuns = getRunLogs(1, 10); // Check last 10 runs to find a successful one with summary
+    // Get persistent metadata for all known torrents
+    const persistentMetadata = getAllTorrentMetadata();
+    
+    // Get last run info for recent reasons/actions
+    const recentRuns = getRunLogs(1, 5); 
     const lastRun = recentRuns.rows.find(r => r.status === 'success' && r.summary);
     
-    let metadataMap = {};
+    let recentDetails = {};
     if (lastRun && lastRun.summary) {
       try {
         const summary = JSON.parse(lastRun.summary);
@@ -64,12 +67,9 @@ router.get('/', async (req, res) => {
         
         details.forEach(detail => {
           if (detail.hash) {
-            metadataMap[detail.hash] = {
-              manager: detail.manager || detail.service,
+            recentDetails[detail.hash] = {
               action: detail.action,
-              reason: detail.reason,
-              metadata: detail.metadata,
-              title: detail.title
+              reason: detail.reason
             };
           }
         });
@@ -77,12 +77,31 @@ router.get('/', async (req, res) => {
         console.error('[DASHBOARD] Failed to parse last run summary:', err.message);
       }
     }
+    
+    // Base URLs for manager links
+    const radarrBase = `http://${getSetting('radarr_host')}:${getSetting('radarr_port') || 7878}`;
+    const sonarrBase = `http://${getSetting('sonarr_host')}:${getSetting('sonarr_port') || 8989}`;
 
-    // Enrich torrents with metadata
-    const enrichedTorrents = allTorrents.map(t => ({
-      ...t,
-      ...(metadataMap[t.hash] || {})
-    }));
+    // Enrich torrents
+    const enrichedTorrents = allTorrents.map(t => {
+      const pm = persistentMetadata[t.hash] || {};
+      const rd = recentDetails[t.hash] || {};
+      
+      let managerUrl = null;
+      if (pm.metadata?.managerUrl) {
+        managerUrl = pm.manager === 'radarr' ? `${radarrBase}${pm.metadata.managerUrl}` : `${sonarrBase}${pm.metadata.managerUrl}`;
+      }
+
+      return {
+        ...t,
+        manager: pm.manager || null,
+        title: pm.title || null,
+        metadata: pm.metadata || null,
+        action: rd.action || null,
+        reason: rd.reason || null,
+        managerUrl: managerUrl
+      };
+    });
 
     // Get run status
     const runStatus = getRunStatus();

@@ -77,10 +77,38 @@ export async function executePhase1(clients, options = {}, log) {
     summary.processed++;
 
     try {
-      // 2a. Try matching against Radarr first
-      const radarrMatch = await radarr.getMovieByHash(torrent.hash);
+      let manager = null;
+      let cached = existingMetadata?.[torrent.hash];
 
-      if (radarrMatch) {
+      // 2a. Determine manager (check cache first)
+      if (cached && cached.manager) {
+        manager = cached.manager;
+        log('info', 'engine', `Using cached manager "${manager}" for torrent "${torrent.name}"`);
+      }
+
+      // 2b. Try matching (if not cached)
+      if (!manager) {
+        const radarrMatch = await radarr.getMovieByHash(torrent.hash);
+        if (radarrMatch) {
+          manager = 'radarr';
+          // Pre-fetch for the check below
+          torrent._match = radarrMatch; 
+        } else {
+          const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash);
+          if (sonarrMatch) {
+            manager = 'sonarr';
+            torrent._match = sonarrMatch;
+          }
+        }
+      }
+
+      if (manager === 'radarr') {
+        const radarrMatch = torrent._match || await radarr.getMovieByHash(torrent.hash);
+        if (!radarrMatch) {
+           log('warn', 'radarr', `Cache mismatch: Could not find movie for ${torrent.name} by hash anymore`);
+           continue; 
+        }
+        
         log('info', 'radarr', `Matched torrent "${torrent.name}" to movie ID ${radarrMatch.movieId}`);
 
         // Get movie details and file quality
@@ -120,6 +148,8 @@ export async function executePhase1(clients, options = {}, log) {
               year: movie.year,
               images: movie.images,
               infoUrl: `https://www.imdb.com/title/${movie.imdbId}`,
+              managerUrl: `/movie/${movie.id}`,
+              id: movie.id,
             },
           });
           continue;
@@ -155,16 +185,21 @@ export async function executePhase1(clients, options = {}, log) {
               year: movie.year,
               images: movie.images,
               infoUrl: `https://www.imdb.com/title/${movie.imdbId}`,
+              managerUrl: `/movie/${movie.id}`,
+              id: movie.id,
             },
           });
           continue;
         }
       }
 
-      // 2b. Try matching against Sonarr
-      const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash);
+      if (manager === 'sonarr') {
+        const sonarrMatch = torrent._match || await sonarr.getEpisodesByHash(torrent.hash);
+        if (!sonarrMatch) {
+          log('warn', 'sonarr', `Cache mismatch: Could not find episodes for ${torrent.name} by hash anymore`);
+          continue; 
+        }
 
-      if (sonarrMatch) {
         log('info', 'sonarr', `Matched torrent "${torrent.name}" to series ID ${sonarrMatch.seriesId}`);
 
         // Get series details for quality profile
@@ -201,6 +236,8 @@ export async function executePhase1(clients, options = {}, log) {
               year: series.year,
               images: series.images,
               infoUrl: `https://www.tvmaze.com/shows/${series.tvMazeId}`,
+              managerUrl: `/series/${series.id}`,
+              id: series.id,
             },
           });
           continue;
@@ -238,6 +275,8 @@ export async function executePhase1(clients, options = {}, log) {
               year: series.year,
               images: series.images,
               infoUrl: `https://www.tvmaze.com/shows/${series.tvMazeId}`,
+              managerUrl: `/series/${series.id}`,
+              id: series.id,
             },
           });
           continue;
