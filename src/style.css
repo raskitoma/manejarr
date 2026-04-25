@@ -565,11 +565,19 @@ input, textarea, select, button {
   font-size: 0.8rem;
 }
 
-.btn-icon {
+.btn-icon-only {
   width: 36px;
   height: 36px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-md);
+}
+
+.btn .btn-icon {
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .lang-select-dropdown option {
@@ -1367,7 +1375,7 @@ select.form-input option {
   content: '↕';
   margin-left: var(--space-xs);
   opacity: 0.2;
-  font-size: 0.7rem;
+  font-size: 0.9rem;
 }
 
 .th-sortable.sort-asc::after {
@@ -1380,6 +1388,12 @@ select.form-input option {
   content: '↓';
   opacity: 1;
   color: var(--accent-primary);
+}
+
+/* Dashboard Action Buttons (matching input height) */
+#run-buttons .btn {
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
 }
 
 .torrent-name-wrapper {
