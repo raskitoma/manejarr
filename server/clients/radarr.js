@@ -18,6 +18,7 @@ export function createRadarrClient({ host, port, apiKey }) {
     const url = `${baseUrl}/api/v3${endpoint}`;
     const headers = {
       'X-Api-Key': apiKey,
+      'Content-Type': 'application/json',
       'Accept': 'application/json, image/*, */*',
       ...options.headers,
     };
@@ -130,6 +131,8 @@ export function createRadarrClient({ host, port, apiKey }) {
    */
   async function setUnmonitored(movieId) {
     const movie = await getMovie(movieId);
+    if (movie.monitored === false) return movie; // Already unmonitored
+    
     movie.monitored = false;
     return request(`/movie/${movieId}`, {
       method: 'PUT',

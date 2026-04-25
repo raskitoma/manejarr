@@ -142,6 +142,39 @@ export async function executePhase1(clients, options = {}, log) {
               qualityMet = true;
               log('warn', 'radarr', 'Quality profile not found, assuming quality is acceptable');
             }
+
+            // Correctly downloaded and imported: Unmonitor regardless of quality cutoff or current label
+            if (!dryRun) await radarr.setUnmonitored(radarrMatch.movieId);
+            summary.unmonitored++;
+            log('info', 'radarr', `${dryRun ? '[DRY RUN] Would ensure unmonitored' : 'Ensuring unmonitored'} movie: ${movie.title}`);
+
+            // Only relabel to 'ignore' if quality cutoff is met
+            if (qualityMet) {
+              summary.matched++;
+              
+              if (torrent._target === 'process') {
+                if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
+                summary.relabeled++;
+                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+              } else {
+                log('info', 'radarr', `Metadata gathered for movie: ${movie.title}`);
+              }
+            } else {
+              log('info', 'radarr', `Quality cutoff NOT met for "${movie.title}". Keeping in media label for further seeding.`);
+            }
+
+            summary.details.push({
+              hash: torrent.hash,
+              name: torrent.name,
+              action: (torrent._target === 'process' && qualityMet) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
+              service: 'radarr',
+              manager: 'radarr',
+              title: movie.title,
+              quality: fileQualityName,
+              qualityMet,
+              metadata: buildRadarrMetadata(movie),
+            });
+            continue;
           } else {
             log('warn', 'radarr', `Movie "${movie.title}" has no imported files yet, skipping`);
             summary.details.push({
@@ -151,46 +184,6 @@ export async function executePhase1(clients, options = {}, log) {
               reason: 'No imported files in Radarr',
               manager: 'radarr',
               metadata: buildRadarrMetadata(movie),
-            });
-            continue;
-          }
-
-          if (qualityMet) {
-            summary.matched++;
-            
-            // Only unmonitor and relabel if target is 'process' (media label)
-            if (torrent._target === 'process') {
-              if (!dryRun) await radarr.setUnmonitored(radarrMatch.movieId);
-              summary.unmonitored++;
-              log('info', 'radarr', `${dryRun ? '[DRY RUN] Would unmonitor' : 'Unmonitored'} movie: ${movie.title}`);
-
-              if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
-              summary.relabeled++;
-              log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
-            } else {
-              log('info', 'radarr', `Metadata gathered for movie: ${movie.title}`);
-            }
-
-            summary.details.push({
-              hash: torrent.hash,
-              name: torrent.name,
-              action: torrent._target === 'process' ? (dryRun ? 'would_process' : 'processed') : 'metadata_only',
-              service: 'radarr',
-              manager: 'radarr',
-              title: movie.title,
-              quality: fileQualityName,
-              metadata: buildRadarrMetadata(movie),
-            });
-            continue;
-          } else {
-            // Quality not met — we still want to save the metadata for the dashboard
-            summary.details.push({
-                hash: torrent.hash,
-                name: torrent.name,
-                action: 'skipped',
-                reason: 'Quality cutoff not met',
-                manager: 'radarr',
-                metadata: buildRadarrMetadata(movie),
             });
             continue;
           }
@@ -221,56 +214,59 @@ export async function executePhase1(clients, options = {}, log) {
 
           const episodeIds = [];
           let allQualityMet = true;
+          let importedCount = 0;
 
           for (const ep of sonarrMatch.episodes) {
-            if (ep.quality) {
-              const qualityName = getQualityName(ep.quality);
-              if (profile) {
-                const met = meetsQualityCutoff(ep.quality, profile);
-                if (!met) allQualityMet = false;
-                log('info', 'sonarr', `Episode ${ep.episodeId}: quality=${qualityName}, meets=${met}`);
+            if (ep.episodeId) {
+              if (ep.eventType === 'downloadFolderImported') {
+                episodeIds.push(ep.episodeId);
+                importedCount++;
+              }
+
+              if (ep.quality) {
+                const qualityName = getQualityName(ep.quality);
+                if (profile) {
+                  const met = meetsQualityCutoff(ep.quality, profile);
+                  if (!met) allQualityMet = false;
+                  log('info', 'sonarr', `Episode ${ep.episodeId}: quality=${qualityName}, meets=${met} (event=${ep.eventType})`);
+                }
+              } else if (profile) {
+                allQualityMet = false;
+                log('warn', 'sonarr', `Episode ${ep.episodeId} has no quality info, assuming quality cutoff not met`);
               }
             }
-            if (ep.episodeId) episodeIds.push(ep.episodeId);
           }
 
-          if (!allQualityMet && profile) {
-            log('warn', 'sonarr', `Quality not met for some episodes, skipping torrent`);
-            summary.details.push({
-              hash: torrent.hash,
-              name: torrent.name,
-              action: 'skipped',
-              reason: 'Quality not met',
-              manager: 'sonarr',
-              metadata: buildSonarrMetadata(series),
-            });
-            continue;
-          }
+          if (importedCount > 0) {
+            // Correctly downloaded/matched: Unmonitor these episodes regardless of quality cutoff or current label
+            if (!dryRun) await sonarr.setEpisodesUnmonitored(episodeIds);
+            summary.unmonitored++;
+            log('info', 'sonarr', `${dryRun ? '[DRY RUN] Would ensure unmonitored' : 'Ensuring unmonitored'} ${episodeIds.length} episode(s) of "${series.title}"`);
 
-          if (episodeIds.length > 0) {
-            summary.matched++;
-
-            // Only unmonitor and relabel if target is 'process' (media label)
-            if (torrent._target === 'process') {
-              if (!dryRun) await sonarr.setEpisodesUnmonitored(episodeIds);
-              summary.unmonitored++;
-              log('info', 'sonarr', `${dryRun ? '[DRY RUN] Would unmonitor' : 'Unmonitored'} ${episodeIds.length} episode(s) of "${series.title}"`);
-
-              if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
-              summary.relabeled++;
-              log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
-            } else {
-              log('info', 'sonarr', `Metadata gathered for series: ${series.title}`);
+            // Only relabel to 'ignore' if ALL episodes in the torrent meet quality cutoff
+            if (allQualityMet && profile) {
+              summary.matched++;
+              
+              if (torrent._target === 'process') {
+                if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
+                summary.relabeled++;
+                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+              } else {
+                log('info', 'sonarr', `Metadata gathered for series: ${series.title}`);
+              }
+            } else if (profile) {
+               log('info', 'sonarr', `Quality cutoff NOT met for some episodes of "${series.title}". Keeping in media label.`);
             }
 
             summary.details.push({
               hash: torrent.hash,
               name: torrent.name,
-              action: torrent._target === 'process' ? (dryRun ? 'would_process' : 'processed') : 'metadata_only',
+              action: (torrent._target === 'process' && allQualityMet) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
               service: 'sonarr',
               manager: 'sonarr',
               title: series.title,
               episodes: episodeIds.length,
+              allQualityMet,
               metadata: buildSonarrMetadata(series),
             });
             continue;

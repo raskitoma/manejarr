@@ -18,6 +18,7 @@ export function createSonarrClient({ host, port, apiKey }) {
     const url = `${baseUrl}/api/v3${endpoint}`;
     const headers = {
       'X-Api-Key': apiKey,
+      'Content-Type': 'application/json',
       'Accept': 'application/json, image/*, */*',
       ...options.headers,
     };
@@ -110,16 +111,19 @@ export function createSonarrClient({ host, port, apiKey }) {
     const records = history.records || history;
 
     if (Array.isArray(records) && records.length > 0) {
-      // Deduplicate by episodeId
       const episodeMap = new Map();
+      // Prioritize 'downloadFolderImported' events to ensure we only match imported episodes
       for (const m of records) {
-        if (m.episodeId && !episodeMap.has(m.episodeId)) {
-          episodeMap.set(m.episodeId, {
-            episodeId: m.episodeId,
-            seriesId: m.seriesId,
-            quality: m.quality,
-            eventType: m.eventType,
-          });
+        if (m.episodeId) {
+          const existing = episodeMap.get(m.episodeId);
+          if (!existing || m.eventType === 'downloadFolderImported') {
+            episodeMap.set(m.episodeId, {
+              episodeId: m.episodeId,
+              seriesId: m.seriesId,
+              quality: m.quality,
+              eventType: m.eventType,
+            });
+          }
         }
       }
 
