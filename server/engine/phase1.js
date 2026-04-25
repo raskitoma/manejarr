@@ -37,20 +37,29 @@ export async function executePhase1(clients, options = {}, log) {
 
   log('info', 'engine', 'Phase 1: Starting Verification & Monitoring');
 
-  // 1. Fetch all torrents labeled 'media'
-  let torrents;
+  // 1. Fetch torrents labeled 'media', 'ignore', or 'fordeletion'
+  let torrents = [];
   try {
     await deluge.connect();
-    torrents = await deluge.getTorrentsByLabel('media');
-    log('info', 'deluge', `Found ${torrents.length} torrent(s) labeled 'media'`);
+    const mediaTorrents = await deluge.getTorrentsByLabel('media');
+    const ignoreTorrents = await deluge.getTorrentsByLabel('ignore');
+    const deletionTorrents = await deluge.getTorrentsByLabel('fordeletion');
+    
+    // Add a marker to distinguish them
+    mediaTorrents.forEach(t => t._target = 'process');
+    ignoreTorrents.forEach(t => t._target = 'metadata_only');
+    deletionTorrents.forEach(t => t._target = 'metadata_only');
+    
+    torrents = [...mediaTorrents, ...ignoreTorrents, ...deletionTorrents];
+    log('info', 'deluge', `Found ${mediaTorrents.length} 'media', ${ignoreTorrents.length} 'ignore', and ${deletionTorrents.length} 'fordeletion' torrent(s)`);
   } catch (err) {
-    log('error', 'deluge', `Failed to fetch media torrents: ${err.message}`);
+    log('error', 'deluge', `Failed to fetch torrents: ${err.message}`);
     summary.errors++;
     return summary;
   }
 
   if (torrents.length === 0) {
-    log('info', 'engine', 'No torrents labeled media. Phase 1 complete.');
+    log('info', 'engine', 'No torrents labeled media, ignore or fordeletion. Phase 1 complete.');
     return summary;
   }
 
@@ -148,18 +157,24 @@ export async function executePhase1(clients, options = {}, log) {
 
           if (qualityMet) {
             summary.matched++;
-            if (!dryRun) await radarr.setUnmonitored(radarrMatch.movieId);
-            summary.unmonitored++;
-            log('info', 'radarr', `${dryRun ? '[DRY RUN] Would unmonitor' : 'Unmonitored'} movie: ${movie.title}`);
+            
+            // Only unmonitor and relabel if target is 'process' (media label)
+            if (torrent._target === 'process') {
+              if (!dryRun) await radarr.setUnmonitored(radarrMatch.movieId);
+              summary.unmonitored++;
+              log('info', 'radarr', `${dryRun ? '[DRY RUN] Would unmonitor' : 'Unmonitored'} movie: ${movie.title}`);
 
-            if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
-            summary.relabeled++;
-            log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+              if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
+              summary.relabeled++;
+              log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+            } else {
+              log('info', 'radarr', `Metadata gathered for movie: ${movie.title}`);
+            }
 
             summary.details.push({
               hash: torrent.hash,
               name: torrent.name,
-              action: dryRun ? 'would_process' : 'processed',
+              action: torrent._target === 'process' ? (dryRun ? 'would_process' : 'processed') : 'metadata_only',
               service: 'radarr',
               manager: 'radarr',
               title: movie.title,
@@ -234,18 +249,24 @@ export async function executePhase1(clients, options = {}, log) {
 
           if (episodeIds.length > 0) {
             summary.matched++;
-            if (!dryRun) await sonarr.setEpisodesUnmonitored(episodeIds);
-            summary.unmonitored++;
-            log('info', 'sonarr', `${dryRun ? '[DRY RUN] Would unmonitor' : 'Unmonitored'} ${episodeIds.length} episode(s) of "${series.title}"`);
 
-            if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
-            summary.relabeled++;
-            log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+            // Only unmonitor and relabel if target is 'process' (media label)
+            if (torrent._target === 'process') {
+              if (!dryRun) await sonarr.setEpisodesUnmonitored(episodeIds);
+              summary.unmonitored++;
+              log('info', 'sonarr', `${dryRun ? '[DRY RUN] Would unmonitor' : 'Unmonitored'} ${episodeIds.length} episode(s) of "${series.title}"`);
+
+              if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
+              summary.relabeled++;
+              log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+            } else {
+              log('info', 'sonarr', `Metadata gathered for series: ${series.title}`);
+            }
 
             summary.details.push({
               hash: torrent.hash,
               name: torrent.name,
-              action: dryRun ? 'would_process' : 'processed',
+              action: torrent._target === 'process' ? (dryRun ? 'would_process' : 'processed') : 'metadata_only',
               service: 'sonarr',
               manager: 'sonarr',
               title: series.title,

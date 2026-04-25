@@ -69,14 +69,14 @@ export function createRadarrClient({ host, port, apiKey }) {
    * Searches by downloadId (the torrent hash, case-insensitive).
    */
   async function getMovieByHash(torrentHash) {
+    const hash = (torrentHash || '').toUpperCase();
+    
     // First check the queue for active downloads
     try {
-      const queue = await request('/queue?pageSize=500&includeMovie=true');
+      const queue = await request(`/queue?downloadId=${hash}&includeMovie=true`);
       const records = queue.records || queue;
-      if (Array.isArray(records)) {
-        const queueMatch = records.find(
-          r => r.downloadId && r.downloadId.toLowerCase() === torrentHash.toLowerCase()
-        );
+      if (Array.isArray(records) && records.length > 0) {
+        const queueMatch = records[0];
         if (queueMatch && queueMatch.movie) {
           return {
             source: 'queue',
@@ -91,15 +91,12 @@ export function createRadarrClient({ host, port, apiKey }) {
     }
 
     // Search history by download ID
-    const history = await request(
-      `/history?pageSize=500&sortKey=date&sortDirection=descending`
-    );
+    const history = await request(`/history?downloadId=${hash}`);
     const records = history.records || history;
 
-    if (Array.isArray(records)) {
-      const match = records.find(
-        r => r.downloadId && r.downloadId.toLowerCase() === torrentHash.toLowerCase()
-      );
+    if (Array.isArray(records) && records.length > 0) {
+      // Find the most relevant history item (e.g., imported or grabbed)
+      const match = records.find(r => r.eventType === 'downloadFolderImported') || records[0];
 
       if (match) {
         return {

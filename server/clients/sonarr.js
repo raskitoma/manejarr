@@ -83,62 +83,51 @@ export function createSonarrClient({ host, port, apiKey }) {
    * A single torrent can contain multiple episodes (e.g., season pack).
    */
   async function getEpisodesByHash(torrentHash) {
+    const hash = (torrentHash || '').toUpperCase();
+
     // Check queue first
     try {
-      const queue = await request('/queue?pageSize=500&includeSeries=true&includeEpisode=true');
+      const queue = await request(`/queue?downloadId=${hash}&includeSeries=true&includeEpisode=true`);
       const records = queue.records || queue;
-      if (Array.isArray(records)) {
-        const queueMatches = records.filter(
-          r => r.downloadId && r.downloadId.toLowerCase() === torrentHash.toLowerCase()
-        );
-        if (queueMatches.length > 0) {
-          return {
-            source: 'queue',
-            seriesId: queueMatches[0].seriesId,
-            series: queueMatches[0].series,
-            episodes: queueMatches.map(m => ({
-              episodeId: m.episodeId || m.episode?.id,
-              episode: m.episode,
-              quality: m.quality,
-            })),
-          };
-        }
+      if (Array.isArray(records) && records.length > 0) {
+        return {
+          source: 'queue',
+          seriesId: records[0].seriesId,
+          series: records[0].series,
+          episodes: records.map(m => ({
+            episodeId: m.episodeId || m.episode?.id,
+            episode: m.episode,
+            quality: m.quality,
+          })),
+        };
       }
     } catch (e) {
       // Queue check is optional
     }
 
     // Search history
-    const history = await request(
-      `/history?pageSize=500&sortKey=date&sortDirection=descending`
-    );
+    const history = await request(`/history?downloadId=${hash}`);
     const records = history.records || history;
 
-    if (Array.isArray(records)) {
-      const matches = records.filter(
-        r => r.downloadId && r.downloadId.toLowerCase() === torrentHash.toLowerCase()
-      );
-
-      if (matches.length > 0) {
-        // Deduplicate by episodeId
-        const episodeMap = new Map();
-        for (const m of matches) {
-          if (m.episodeId && !episodeMap.has(m.episodeId)) {
-            episodeMap.set(m.episodeId, {
-              episodeId: m.episodeId,
-              seriesId: m.seriesId,
-              quality: m.quality,
-              eventType: m.eventType,
-            });
-          }
+    if (Array.isArray(records) && records.length > 0) {
+      // Deduplicate by episodeId
+      const episodeMap = new Map();
+      for (const m of records) {
+        if (m.episodeId && !episodeMap.has(m.episodeId)) {
+          episodeMap.set(m.episodeId, {
+            episodeId: m.episodeId,
+            seriesId: m.seriesId,
+            quality: m.quality,
+            eventType: m.eventType,
+          });
         }
-
-        return {
-          source: 'history',
-          seriesId: matches[0].seriesId,
-          episodes: Array.from(episodeMap.values()),
-        };
       }
+
+      return {
+        source: 'history',
+        seriesId: records[0].seriesId,
+        episodes: Array.from(episodeMap.values()),
+      };
     }
 
     return null;
