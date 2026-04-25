@@ -115,6 +115,7 @@ const DICTIONARY = {
     language: 'Language',
     english: 'English',
     spanish: 'Spanish',
+    reset: 'Reset',
   },
   es: {
     // General
@@ -226,6 +227,7 @@ const DICTIONARY = {
     light_mode: 'Modo Claro',
     dark_mode: 'Modo Oscuro',
     language: 'Idioma',
+    reset: 'Limpiar',
   }
 };
 

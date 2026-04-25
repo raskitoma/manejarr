@@ -116,13 +116,12 @@ export function insertRunLog(runType, status) {
     'INSERT INTO run_logs (run_type, status) VALUES (?, ?)',
     [runType, status]
   );
-  saveDatabase();
-
-  // Get the last inserted id
   const stmt = db.prepare('SELECT last_insert_rowid() as id');
   stmt.step();
   const row = stmt.getAsObject();
   stmt.free();
+
+  saveDatabase();
   return row.id;
 }
 
@@ -134,20 +133,32 @@ export function updateRunLog(id, status, summary, error = null) {
   saveDatabase();
 }
 
-export function getRunLogs(page = 1, pageSize = 20) {
-  const offset = (page - 1) * pageSize;
+export function getRunLogs({ page = 1, pageSize = 20, runType, status } = {}) {
+  let where = '1=1';
+  const params = [];
+
+  if (runType) {
+    where += ' AND run_type = ?';
+    params.push(runType);
+  }
+  if (status) {
+    where += ' AND status = ?';
+    params.push(status);
+  }
 
   // Total count
-  const countStmt = db.prepare('SELECT COUNT(*) as total FROM run_logs');
+  const countStmt = db.prepare(`SELECT COUNT(*) as total FROM run_logs WHERE ${where}`);
+  countStmt.bind(params);
   countStmt.step();
   const total = countStmt.getAsObject().total;
   countStmt.free();
 
   // Paginated results
+  const offset = (page - 1) * pageSize;
   const stmt = db.prepare(
-    'SELECT * FROM run_logs ORDER BY started_at DESC LIMIT ? OFFSET ?'
+    `SELECT * FROM run_logs WHERE ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`
   );
-  stmt.bind([pageSize, offset]);
+  stmt.bind([...params, pageSize, offset]);
   const rows = [];
   while (stmt.step()) {
     rows.push(stmt.getAsObject());
@@ -238,6 +249,13 @@ export function cleanupOldLogs() {
 export function clearAllLogs() {
   db.run('DELETE FROM event_logs');
   db.run('DELETE FROM run_logs');
+  // Reset autoincrement sequences so we start back at 1
+  try {
+    db.run("DELETE FROM sqlite_sequence WHERE name = 'run_logs'");
+    db.run("DELETE FROM sqlite_sequence WHERE name = 'event_logs'");
+  } catch (e) {
+    // sqlite_sequence might not exist if no autoincrement columns yet
+  }
   saveDatabase();
 }
 
@@ -270,12 +288,12 @@ export function insertSchedule(name, cronExpr, taskType = 'run') {
     'INSERT INTO schedules (name, cron_expr, task_type) VALUES (?, ?, ?)',
     [name, cronExpr, taskType]
   );
-  saveDatabase();
-
   const stmt = db.prepare('SELECT last_insert_rowid() as id');
   stmt.step();
   const row = stmt.getAsObject();
   stmt.free();
+
+  saveDatabase();
   return row.id;
 }
 

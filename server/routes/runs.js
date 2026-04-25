@@ -64,8 +64,8 @@ router.get('/runs', (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const pageSize = parseInt(req.query.pageSize, 10) || 20;
-
-    const result = getRunLogs(page, pageSize);
+    const { runType, status } = req.query;
+    const result = getRunLogs({ page, pageSize, runType, status });
 
     // Parse JSON summary for each row
     result.rows = result.rows.map(row => ({

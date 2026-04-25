@@ -10,6 +10,7 @@ import { t } from '../utils/i18n.js';
 let currentEventPage = 1;
 let currentRunPage = 1;
 let currentFilters = {};
+let currentRunFilters = {};
 
 export async function renderLogs() {
   const container = document.getElementById('page-content');
@@ -57,8 +58,12 @@ export async function renderLogs() {
               <label class="form-label">End Date</label>
               <input type="date" id="filter-end-date" class="form-input" />
             </div>
+            <div class="form-group" style="margin-bottom: 0; max-width: 80px;">
+              <label class="form-label">${t('run_id')}</label>
+              <input type="number" id="filter-run-id" class="form-input" placeholder="ID" min="1" />
+            </div>
             <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
-              <button class="btn btn-secondary" id="apply-filters-btn">Apply</button>
+              <button class="btn btn-secondary" id="apply-filters-btn">${t('reset')}</button>
             </div>
             <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
               <button class="btn btn-secondary" id="export-csv-btn">📥 Export CSV</button>
@@ -71,12 +76,11 @@ export async function renderLogs() {
           <table class="table">
             <thead>
               <tr>
-                <th style="width: 160px;">Timestamp</th>
                 <th style="width: 160px;">${t('timestamp')}</th>
                 <th style="width: 80px;">${t('level')}</th>
                 <th style="width: 100px;">${t('category')}</th>
                 <th>${t('message')}</th>
-                <th style="width: 60px;">${t('run_id')}</th>
+                <th style="width: 80px;">${t('run_id')}</th>
               </tr>
             </thead>
             <tbody id="events-table-body">
@@ -94,6 +98,33 @@ export async function renderLogs() {
 
       <!-- Run Logs Tab -->
       <div id="tab-runs" class="tab-pane">
+        <!-- Filters -->
+        <div class="card mb-lg">
+          <div class="flex items-center gap-md flex-wrap">
+            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+              <label class="form-label">Type</label>
+              <select id="filter-run-type" class="form-input">
+                <option value="">All</option>
+                <option value="manual">Manual</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="dry-run">Dry Run</option>
+                <option value="compact">Maintenance</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+              <label class="form-label">Status</label>
+              <select id="filter-run-status" class="form-input">
+                <option value="">All</option>
+                <option value="running">Running</option>
+                <option value="success">Success</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
+              <button class="btn btn-secondary" id="apply-run-filters-btn">${t('reset')}</button>
+            </div>
+          </div>
+        </div>
         <div class="table-container">
           <table class="table">
             <thead>
@@ -151,19 +182,66 @@ export async function renderLogs() {
   });
 
   // Wire up filter button
-  document.getElementById('apply-filters-btn')?.addEventListener('click', () => {
+  const applyBtn = document.getElementById('apply-filters-btn');
+  applyBtn?.addEventListener('click', () => {
+    // Now functions as a "Clear/Reset" button
+    const levelInput = document.getElementById('filter-level');
+    const categoryInput = document.getElementById('filter-category');
+    const startInput = document.getElementById('filter-start-date');
+    const endInput = document.getElementById('filter-end-date');
+    const runIdInput = document.getElementById('filter-run-id');
+
+    if (levelInput) levelInput.value = '';
+    if (categoryInput) categoryInput.value = '';
+    if (startInput) startInput.value = '';
+    if (endInput) endInput.value = '';
+    if (runIdInput) runIdInput.value = '';
+
     currentEventPage = 1;
-    currentFilters = {
-      level: document.getElementById('filter-level')?.value || '',
-      category: document.getElementById('filter-category')?.value || '',
-      startDate: document.getElementById('filter-start-date')?.value || '',
-      endDate: document.getElementById('filter-end-date')?.value || '',
-    };
+    currentFilters = { level: '', category: '', startDate: '', endDate: '', runId: '' };
     loadEventLogs();
+  });
+
+  // Auto-refresh on filter change
+  ['filter-level', 'filter-category', 'filter-start-date', 'filter-end-date', 'filter-run-id'].forEach(id => {
+    document.getElementById(id)?.addEventListener(id.includes('run-id') ? 'input' : 'change', () => {
+      currentEventPage = 1;
+      const runIdVal = document.getElementById('filter-run-id')?.value || '';
+      currentFilters = {
+        level: document.getElementById('filter-level')?.value || '',
+        category: document.getElementById('filter-category')?.value || '',
+        startDate: document.getElementById('filter-start-date')?.value || '',
+        endDate: document.getElementById('filter-end-date')?.value || '',
+        runId: parseInt(runIdVal, 10) > 0 ? runIdVal : '',
+      };
+      loadEventLogs();
+    });
   });
 
   // Export CSV
   document.getElementById('export-csv-btn')?.addEventListener('click', exportCSV);
+
+  // Wire up run log filters
+  document.getElementById('apply-run-filters-btn')?.addEventListener('click', () => {
+    const typeInput = document.getElementById('filter-run-type');
+    const statusInput = document.getElementById('filter-run-status');
+    if (typeInput) typeInput.value = '';
+    if (statusInput) statusInput.value = '';
+    currentRunPage = 1;
+    currentRunFilters = { runType: '', status: '' };
+    loadRunLogs();
+  });
+
+  ['filter-run-type', 'filter-run-status'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      currentRunPage = 1;
+      currentRunFilters = {
+        runType: document.getElementById('filter-run-type')?.value || '',
+        status: document.getElementById('filter-run-status')?.value || '',
+      };
+      loadRunLogs();
+    });
+  });
 
   // Load initial data
   await Promise.all([loadEventLogs(), loadRunLogs()]);
@@ -182,6 +260,7 @@ async function loadEventLogs() {
     if (currentFilters.category) params.set('category', currentFilters.category);
     if (currentFilters.startDate) params.set('startDate', currentFilters.startDate);
     if (currentFilters.endDate) params.set('endDate', currentFilters.endDate);
+    if (currentFilters.runId) params.set('runId', currentFilters.runId);
 
     const data = await api.get(`/logs/events?${params.toString()}`);
     renderEventTable(data);
@@ -222,17 +301,48 @@ function renderEventTable(data) {
         <td><span class="badge ${badgeClass}">${log.level}</span></td>
         <td><span class="badge badge-info">${log.category}</span></td>
         <td style="max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(log.message)}">${escapeHtml(log.message)}</td>
-        <td class="text-mono">${log.run_id || '—'}</td>
+        <td>${(log.run_id !== null && log.run_id !== undefined) ? `<a href="#" class="run-link text-mono" data-run="${log.run_id}">#${log.run_id}</a>` : '—'}</td>
       </tr>
     `;
   }).join('');
+
+  // Wire up run links
+  tbody.querySelectorAll('.run-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const rid = e.currentTarget.getAttribute('data-run');
+      if (rid) filterByRun(rid);
+    });
+  });
+}
+
+function filterByRun(runId) {
+  const runIdInput = document.getElementById('filter-run-id');
+  if (runIdInput) runIdInput.value = runId;
+
+  currentFilters.runId = runId;
+  currentEventPage = 1;
+
+  // Switch to events tab
+  const eventTabBtn = document.querySelector('.tab-btn[data-tab="events"]');
+  eventTabBtn?.click();
+
+  loadEventLogs();
 }
 
 // --- RUN LOGS ---
 
 async function loadRunLogs() {
   try {
-    const data = await api.get(`/logs/runs?page=${currentRunPage}&pageSize=20`);
+    const params = new URLSearchParams({
+      page: currentRunPage.toString(),
+      pageSize: '20',
+    });
+
+    if (currentRunFilters.runType) params.set('runType', currentRunFilters.runType);
+    if (currentRunFilters.status) params.set('status', currentRunFilters.status);
+
+    const data = await api.get(`/logs/runs?${params.toString()}`);
     renderRunTable(data);
     renderPagination('runs-pagination', data.total, 20, currentRunPage, (newPage) => {
       currentRunPage = newPage;
@@ -275,7 +385,7 @@ function renderRunTable(data) {
 
     return `
       <tr>
-        <td class="text-mono">${run.id}</td>
+        <td><a href="#" class="run-link text-mono" data-run="${run.id}">#${run.id}</a></td>
         <td class="text-mono" style="font-size: 0.8rem;">${formatDateTime(run.started_at)}</td>
         <td class="text-mono" style="font-size: 0.8rem;">${run.finished_at ? formatDateTime(run.finished_at) : '—'}</td>
         <td><span class="badge badge-info">${run.run_type}</span></td>
@@ -284,6 +394,15 @@ function renderRunTable(data) {
       </tr>
     `;
   }).join('');
+
+  // Wire up run links
+  tbody.querySelectorAll('.run-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const rid = e.currentTarget.getAttribute('data-run');
+      if (rid) filterByRun(rid);
+    });
+  });
 }
 
 // --- SHARED ---
@@ -326,11 +445,12 @@ function renderPagination(containerId, totalItems, pageSize, currentPage, onPage
 
 async function exportCSV() {
   try {
-    const params = new URLSearchParams({ page: '1', pageSize: '10000' });
+    const params = new URLSearchParams({ page: '1', pageSize: '100000' });
     if (currentFilters.level) params.set('level', currentFilters.level);
     if (currentFilters.category) params.set('category', currentFilters.category);
     if (currentFilters.startDate) params.set('startDate', currentFilters.startDate);
     if (currentFilters.endDate) params.set('endDate', currentFilters.endDate);
+    if (currentFilters.runId) params.set('runId', currentFilters.runId);
 
     const data = await api.get(`/logs/events?${params.toString()}`);
 
@@ -344,7 +464,7 @@ async function exportCSV() {
       `"${log.created_at}","${log.level}","${log.category}","${(log.message || '').replace(/"/g, '""')}","${log.run_id || ''}"`
     );
 
-    const csv = [header, ...rows].join('\\n');
+    const csv = [header, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
 

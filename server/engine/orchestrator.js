@@ -17,7 +17,8 @@ import {
   updateRunLog,
   insertEventLog,
   cleanupOldLogs,
-  updateTorrentMetadata
+  updateTorrentMetadata,
+  getAllTorrentMetadata
 } from '../db/database.js';
 import { notifyRunComplete } from '../notifications/notifier.js';
 

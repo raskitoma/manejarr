@@ -23,7 +23,7 @@ import { meetsQualityCutoff, getQualityName } from './quality.js';
  */
 export async function executePhase1(clients, options = {}, log) {
   const { deluge, radarr, sonarr } = clients;
-  const { dryRun = false } = options;
+  const { dryRun = false, existingMetadata = {} } = options;
 
   const summary = {
     processed: 0,

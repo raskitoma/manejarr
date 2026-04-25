@@ -47,9 +47,14 @@ router.get('/events', (req, res) => {
  */
 router.get('/runs', (req, res) => {
   try {
-    const { page = 1, pageSize = 20 } = req.query;
+    const { page = 1, pageSize = 20, runType, status } = req.query;
     
-    const result = getRunLogs(parseInt(page, 10), parseInt(pageSize, 10));
+    const result = getRunLogs({
+      page: parseInt(page, 10),
+      pageSize: parseInt(pageSize, 10),
+      runType,
+      status,
+    });
 
     // Parse summary JSON for each row
     result.rows = result.rows.map(row => ({
