@@ -124,6 +124,13 @@ export function createDelugeClient({ host, port, password }) {
   }
 
   /**
+   * Get all torrents.
+   */
+  async function getAllTorrents() {
+    return await getTorrentsByLabel(null);
+  }
+
+  /**
    * Get detailed status for a single torrent.
    */
   async function getTorrentDetails(hash) {
@@ -179,6 +186,7 @@ export function createDelugeClient({ host, port, password }) {
     connect,
     testConnection,
     getTorrentsByLabel,
+    getAllTorrents,
     getTorrentDetails,
     setTorrentLabel,
     pauseTorrent,

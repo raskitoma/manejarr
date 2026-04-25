@@ -343,19 +343,26 @@ export function getAllTorrentMetadata() {
 export function compactDatabase(activeHashes) {
   if (!activeHashes || !Array.isArray(activeHashes)) return { deleted: 0 };
   
-  const placeholders = activeHashes.map(() => '?').join(',');
-  const stmt = db.prepare(`SELECT hash FROM torrent_metadata WHERE hash NOT IN (${placeholders})`);
-  stmt.bind(activeHashes);
-  
+  const activeSet = new Set(activeHashes);
+  const stmt = db.prepare('SELECT hash FROM torrent_metadata');
   const hashesToDelete = [];
+  
   while (stmt.step()) {
-    hashesToDelete.push(stmt.getAsObject().hash);
+    const row = stmt.getAsObject();
+    if (!activeSet.has(row.hash)) {
+      hashesToDelete.push(row.hash);
+    }
   }
   stmt.free();
 
   if (hashesToDelete.length > 0) {
-    const delPlaceholders = hashesToDelete.map(() => '?').join(',');
-    db.run(`DELETE FROM torrent_metadata WHERE hash IN (${delPlaceholders})`, hashesToDelete);
+    // Delete in chunks to avoid SQLite variable limits (default 999)
+    const chunkSize = 500;
+    for (let i = 0; i < hashesToDelete.length; i += chunkSize) {
+      const chunk = hashesToDelete.slice(i, i + chunkSize);
+      const placeholders = chunk.map(() => '?').join(',');
+      db.run(`DELETE FROM torrent_metadata WHERE hash IN (${placeholders})`, chunk);
+    }
     saveDatabase();
   }
 
