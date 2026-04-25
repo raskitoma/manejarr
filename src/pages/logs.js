@@ -138,7 +138,7 @@ export async function renderLogs() {
   document.getElementById('clear-logs-btn')?.addEventListener('click', async () => {
     if (confirm(t('clear_confirm'))) {
       try {
-        await api.delete('/logs');
+        await api.delete('/logs/clear');
         showToast(t('logs_cleared'), 'success');
         currentEventPage = 1;
         currentRunPage = 1;
