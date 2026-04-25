@@ -301,18 +301,18 @@ function renderPagination(containerId, totalItems, pageSize, currentPage, onPage
   let buttons = '';
 
   // Previous
-  buttons += `<button class="pagination-btn" ${currentPage <= 1 ? 'disabled' : ''} data-page="${currentPage - 1}">‹</button>`;
+  buttons += `<button type="button" class="pagination-btn" ${currentPage <= 1 ? 'disabled' : ''} data-page="${currentPage - 1}"><span style="pointer-events: none;">‹</span></button>`;
 
   // Page numbers (show up to 5)
   const start = Math.max(1, currentPage - 2);
   const end = Math.min(totalPages, start + 4);
 
   for (let i = start; i <= end; i++) {
-    buttons += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+    buttons += `<button type="button" class="pagination-btn ${i === currentPage ? 'active' : ''}" data-page="${i}"><span style="pointer-events: none;">${i}</span></button>`;
   }
 
   // Next
-  buttons += `<button class="pagination-btn" ${currentPage >= totalPages ? 'disabled' : ''} data-page="${currentPage + 1}">›</button>`;
+  buttons += `<button type="button" class="pagination-btn" ${currentPage >= totalPages ? 'disabled' : ''} data-page="${currentPage + 1}"><span style="pointer-events: none;">›</span></button>`;
 
   pDiv.innerHTML = buttons + `<span class="pagination-info">${totalItems} total</span>`;
 

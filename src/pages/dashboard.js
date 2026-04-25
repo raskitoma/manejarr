@@ -333,23 +333,37 @@ function renderDashboardPagination(totalItems) {
   }
 
   let buttons = '';
-  buttons += `<button class="pagination-btn" ${currentDashboardPage <= 1 ? 'disabled' : ''} data-dpage="${currentDashboardPage - 1}">‹</button>`;
+  // First & Prev
+  buttons += `<button type="button" class="pagination-btn" ${currentDashboardPage <= 1 ? 'disabled' : ''} data-page="1" title="First Page"><span style="pointer-events: none;">«</span></button>`;
+  buttons += `<button type="button" class="pagination-btn" ${currentDashboardPage <= 1 ? 'disabled' : ''} data-page="${currentDashboardPage - 1}" title="Previous Page"><span style="pointer-events: none;">‹</span></button>`;
 
-  const start = Math.max(1, currentDashboardPage - 2);
-  const end = Math.min(totalPages, start + 4);
+  // Page Numbers
+  let start = Math.max(1, currentDashboardPage - 2);
+  let end = Math.min(totalPages, start + 4);
+  if (end - start < 4) start = Math.max(1, end - 4);
+
   for (let i = start; i <= end; i++) {
-    buttons += `<button class="pagination-btn ${i === currentDashboardPage ? 'active' : ''}" data-dpage="${i}">${i}</button>`;
+    buttons += `<button type="button" class="pagination-btn ${i === currentDashboardPage ? 'active' : ''}" data-page="${i}"><span style="pointer-events: none;">${i}</span></button>`;
   }
 
-  buttons += `<button class="pagination-btn" ${currentDashboardPage >= totalPages ? 'disabled' : ''} data-dpage="${currentDashboardPage + 1}">›</button>`;
+  // Next & Last
+  buttons += `<button type="button" class="pagination-btn" ${currentDashboardPage >= totalPages ? 'disabled' : ''} data-page="${currentDashboardPage + 1}" title="Next Page"><span style="pointer-events: none;">›</span></button>`;
+  buttons += `<button type="button" class="pagination-btn" ${currentDashboardPage >= totalPages ? 'disabled' : ''} data-page="${totalPages}" title="Last Page"><span style="pointer-events: none;">»</span></button>`;
+  
   pDiv.innerHTML = buttons + `<span class="pagination-info">${totalItems} total</span>`;
 
-  pDiv.querySelectorAll('[data-dpage]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      currentDashboardPage = parseInt(btn.dataset.dpage, 10);
+  // Use Event Delegation
+  pDiv.onclick = (e) => {
+    const btn = e.target.closest('.pagination-btn');
+    if (!btn || btn.disabled) return;
+    
+    const page = parseInt(btn.dataset.page, 10);
+    if (!isNaN(page) && page !== currentDashboardPage) {
+      currentDashboardPage = page;
       renderFilteredTorrents();
-    });
-  });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 }
 
 function renderStatsSkeleton() {
