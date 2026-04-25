@@ -33,6 +33,7 @@ const DICTIONARY = {
     running: 'Running...',
     search: 'Search',
     added: 'Added',
+    started: 'started',
 
     // Settings
     services: 'Services',
@@ -147,6 +148,7 @@ const DICTIONARY = {
     running: 'Ejecutando...',
     search: 'Buscar',
     added: 'Añadido',
+    started: 'iniciado',
 
     // Settings
     services: 'Servicios',

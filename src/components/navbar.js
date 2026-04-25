@@ -23,9 +23,10 @@ export function renderTopBar(pageTitle, connectionStatus = {}, runStatus = {}) {
     `;
   }).join('');
 
+  const runTypeLabel = runStatus.runType ? ` (${runStatus.runType.replace('-', ' ')})` : '';
   const runPill = runStatus.running
-    ? `<div class="run-status-pill running"><span class="spinner"></span> ${t('running')}</div>`
-    : `<div class="run-status-pill idle">● ${t('idle')}</div>`;
+    ? `<div class="run-status-pill running" title="${t('running')}${runTypeLabel}"><span class="spinner"></span> ${t('running')}</div>`
+    : `<div class="run-status-pill idle" title="${t('idle')}">● ${t('idle')}</div>`;
 
   topBar.innerHTML = `
     <div class="top-bar-left">

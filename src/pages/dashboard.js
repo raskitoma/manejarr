@@ -251,7 +251,7 @@ async function loadDashboardData() {
     }
 
     renderFilteredTorrents();
-    setRunButtonsEnabled(allTorrents.length > 0);
+    setRunButtonsEnabled(allTorrents.length > 0, data.runStatus);
 
   } catch (err) {
     if (err.message !== 'Authentication required') {

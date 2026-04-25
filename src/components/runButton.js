@@ -33,11 +33,23 @@ async function triggerRun(dryRun, onStatusChange) {
   const dryBtn = document.getElementById('dry-run-btn');
 
   try {
-    // Disable buttons
-    if (runBtn) { runBtn.disabled = true; runBtn.innerHTML = '<span class="spinner"></span> Running...'; }
-    if (dryBtn) { dryBtn.disabled = true; }
+    // Disable buttons and show loading
+    if (runBtn) { 
+      runBtn.disabled = true; 
+      if (!dryRun) {
+        runBtn.classList.add('btn-running-animated');
+        runBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+      }
+    }
+    if (dryBtn) { 
+      dryBtn.disabled = true; 
+      if (dryRun) {
+        dryBtn.classList.add('btn-running-animated');
+        dryBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+      }
+    }
 
-    showToast(`${dryRun ? 'Dry run' : 'Run'} started...`, 'info');
+    showToast(`${dryRun ? t('dry_run') : t('run_now')} ${t('started')}...`, 'info');
 
     await api.post('/run', { dryRun });
 
@@ -94,15 +106,51 @@ function resetButtons() {
   const runBtn = document.getElementById('run-now-btn');
   const dryBtn = document.getElementById('dry-run-btn');
 
-  if (runBtn) { runBtn.disabled = false; runBtn.innerHTML = '<span>▶</span> Run Now'; }
-  if (dryBtn) { dryBtn.disabled = false; }
+  if (runBtn) { 
+    runBtn.disabled = false; 
+    runBtn.classList.remove('btn-running-animated');
+    runBtn.innerHTML = `<span>🚀</span> ${t('run_now')}`; 
+  }
+  if (dryBtn) { 
+    dryBtn.disabled = false; 
+    dryBtn.classList.remove('btn-running-animated');
+    dryBtn.innerHTML = `<span>🔍</span> ${t('dry_run')}`; 
+  }
 }
 
-export function setRunButtonsEnabled(enabled) {
-  // Do not alter state if currently polling/running
+export function setRunButtonsEnabled(enabled, runStatus = { running: false }) {
+  // Do not alter state if currently polling (initiated by this component instance)
   if (pollInterval) return;
+
   const runBtn = document.getElementById('run-now-btn');
   const dryBtn = document.getElementById('dry-run-btn');
-  if (runBtn) runBtn.disabled = !enabled;
-  if (dryBtn) dryBtn.disabled = !enabled;
+  
+  if (!runBtn || !dryBtn) return;
+
+  // If a run is in progress (from any source)
+  if (runStatus.running) {
+    runBtn.disabled = true;
+    dryBtn.disabled = true;
+    
+    // Apply animation to the active button if it's one of these
+    if (runStatus.runType === 'manual' || runStatus.runType === 'run') {
+      runBtn.classList.add('btn-running-animated');
+      runBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+    } else if (runStatus.runType === 'dry-run') {
+      dryBtn.classList.add('btn-running-animated');
+      dryBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+    }
+    return;
+  }
+
+  // Normal enabled/disabled state based on torrent availability
+  runBtn.disabled = !enabled;
+  dryBtn.disabled = !enabled;
+  
+  if (enabled) {
+    runBtn.classList.remove('btn-running-animated');
+    dryBtn.classList.remove('btn-running-animated');
+    runBtn.innerHTML = `<span>🚀</span> ${t('run_now')}`;
+    dryBtn.innerHTML = `<span>🔍</span> ${t('dry_run')}`;
+  }
 }

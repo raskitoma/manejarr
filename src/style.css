@@ -1505,3 +1505,37 @@ select.form-input option {
   color: var(--text-tertiary);
   pointer-events: none;
 }
+
+/* Run Button Animations */
+.btn-running-animated {
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.btn-running-animated::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: var(--accent-gradient);
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0.8;
+  animation: running-glow 2s ease-in-out infinite;
+}
+
+@keyframes running-glow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.btn-secondary.btn-running-animated::before {
+  background: var(--status-info);
+  filter: blur(10px);
+}

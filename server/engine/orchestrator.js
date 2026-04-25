@@ -25,6 +25,7 @@ import { notifyRunComplete } from '../notifications/notifier.js';
 // Singleton lock to prevent concurrent executions
 let isRunning = false;
 let currentRunId = null;
+let currentRunType = null;
 
 /**
  * Get current run status.
@@ -33,6 +34,7 @@ export function getRunStatus() {
   return {
     running: isRunning,
     runId: currentRunId,
+    runType: currentRunType,
   };
 }
 
@@ -99,6 +101,7 @@ export async function runFull(options = {}) {
 
   isRunning = true;
   const effectiveRunType = dryRun ? 'dry-run' : runType;
+  currentRunType = effectiveRunType;
 
   // Create run log entry
   const runId = insertRunLog(effectiveRunType, 'running');
@@ -198,6 +201,7 @@ export async function runFull(options = {}) {
   } finally {
     isRunning = false;
     currentRunId = null;
+    currentRunType = null;
     
     // Clean up old logs based on retention policy
     if (!dryRun) {
