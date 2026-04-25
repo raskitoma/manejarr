@@ -12,20 +12,27 @@ export function createSonarrClient({ host, port, apiKey }) {
   const baseUrl = `http://${host}:${port || 8989}`;
 
   /**
-   * Make an authenticated request to the Sonarr API.
+   * Make an authenticated request to the Sonarr API and return the raw response.
    */
-  async function request(endpoint, options = {}) {
+  async function requestRaw(endpoint, options = {}) {
     const url = `${baseUrl}/api/v3${endpoint}`;
     const headers = {
       'X-Api-Key': apiKey,
-      'Content-Type': 'application/json',
+      'Accept': 'application/json, image/*, */*',
       ...options.headers,
     };
 
-    const response = await fetch(url, {
+    return fetch(url, {
       ...options,
       headers,
     });
+  }
+
+  /**
+   * Make an authenticated request to the Sonarr API and parse as JSON.
+   */
+  async function request(endpoint, options = {}) {
+    const response = await requestRaw(endpoint, options);
 
     if (!response.ok) {
       const text = await response.text();
@@ -192,5 +199,6 @@ export function createSonarrClient({ host, port, apiKey }) {
     getQualityProfiles,
     getQualityProfile,
     request,
+    requestRaw,
   };
 }

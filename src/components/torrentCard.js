@@ -17,7 +17,7 @@ export function renderTorrentRow(torrent) {
   ` : '';
 
   // Metadata for hover
-  const metadataAttr = torrent.metadata ? `data-metadata='${JSON.stringify(torrent.metadata).replace(/'/g, "&apos;")}'` : '';
+  const metadataAttr = torrent.metadata ? `data-metadata="${JSON.stringify(torrent.metadata).replace(/"/g, '&quot;')}"` : '';
   const managerAttr = torrent.manager ? `data-manager="${torrent.manager}"` : '';
 
   return `

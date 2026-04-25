@@ -106,18 +106,10 @@ router.get('/', async (req, res) => {
     // Get run status
     const runStatus = getRunStatus();
 
-    // Get connection info for image loading
+    // Get connection info (minimal, for manager identification)
     const connectionInfo = {
-      radarr: {
-        host: getSetting('radarr_host'),
-        port: getSetting('radarr_port') || 7878,
-        apiKey: decrypt(getSetting('radarr_api_key') || ''),
-      },
-      sonarr: {
-        host: getSetting('sonarr_host'),
-        port: getSetting('sonarr_port') || 8989,
-        apiKey: decrypt(getSetting('sonarr_api_key') || ''),
-      }
+      radarr: { active: !!getSetting('radarr_host') },
+      sonarr: { active: !!getSetting('sonarr_host') }
     };
 
     res.json({
@@ -136,6 +128,60 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[DASHBOARD] Error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/proxy-image
+ * Proxies image requests to Radarr/Sonarr. 
+ * Prevents API key exposure and bypasses network restrictions.
+ */
+router.get('/proxy-image', async (req, res) => {
+  try {
+    const { manager, url } = req.query;
+
+    if (!manager || !url) {
+      return res.status(400).json({ error: 'Missing manager or url' });
+    }
+
+    // Build client based on manager
+    let client;
+    const host = getSetting(`${manager}_host`);
+    const port = getSetting(`${manager}_port`) || (manager === 'radarr' ? 7878 : 8989);
+    const apiKey = decrypt(getSetting(`${manager}_api_key`) || '');
+
+    if (!host || !apiKey) {
+      return res.status(500).json({ error: 'Service not configured' });
+    }
+
+    if (manager === 'radarr') {
+      client = createRadarrClient({ host, port, apiKey });
+    } else if (manager === 'sonarr') {
+      client = createSonarrClient({ host, port, apiKey });
+    } else {
+      return res.status(400).json({ error: 'Invalid manager' });
+    }
+
+    // Forward the request to the *arr instance
+    // Note: url already contains the path including api/v3/mediacover if from metadata
+    // We strip /api/v3 if it's dual-included by the client request helper
+    const targetUrl = url.replace(/^\/api\/v3/, '');
+    const response = await client.requestRaw(targetUrl);
+
+    if (!response.ok) {
+      return res.status(response.status).send('Failed to fetch image from service');
+    }
+
+    // Set headers and pipe response
+    res.set('Content-Type', response.headers.get('Content-Type'));
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24h
+    
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+
+  } catch (err) {
+    console.error('[PROXY] Error:', err.message);
+    res.status(500).send('Internal Server Error');
   }
 });
 

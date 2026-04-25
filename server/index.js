@@ -29,7 +29,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── Protected API routes ──
-app.use('/api', basicAuth, apiRouter);
+app.use('/api', (req, res, next) => {
+  // Allow image proxy without authentication as <img> tags can't send headers
+  if (req.path === '/dashboard/proxy-image' && req.method === 'GET') {
+    return next();
+  }
+  basicAuth(req, res, next);
+}, apiRouter);
 
 // ── Serve built frontend (production) ──
 if (config.isProduction && existsSync(config.distDir)) {

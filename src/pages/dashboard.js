@@ -133,19 +133,18 @@ function initDashboardEvents() {
       
       // Find poster image
       const poster = metadata.images?.find(img => img.coverType === 'poster');
-      if (!poster) return;
-
-      let imgUrl = poster.remoteUrl;
-      // If no remote URL, construct local one using connectionInfo
-      if (!imgUrl && connectionInfo?.[manager.toLowerCase()]) {
-        const config = connectionInfo[manager.toLowerCase()];
-        imgUrl = `http://${config.host}:${config.port}${poster.url}${poster.url.includes('?') ? '&' : '?'}apikey=${config.apiKey}`;
+      
+      let imgHtml = '';
+      if (poster) {
+        // Use server-side proxy to fetch the image securely
+        const imgUrl = `/api/dashboard/proxy-image?manager=${manager.toLowerCase()}&url=${encodeURIComponent(poster.url)}`;
+        imgHtml = `<img src="${imgUrl}" class="hover-card-poster" onerror="this.onerror=null; this.src='https://placehold.co/200x280?text=No+Poster'">`;
+      } else {
+        imgHtml = `<div class="hover-card-poster empty-poster">No Poster</div>`;
       }
 
-      if (!imgUrl) return;
-
       hoverCard.innerHTML = `
-        <img src="${imgUrl}" class="hover-card-poster" onerror="this.src='https://placehold.co/200x280?text=No+Poster'">
+        ${imgHtml}
         <div class="hover-card-content">
           <div class="hover-card-title">${metadata.title} (${metadata.year || 'N/A'})</div>
           <div class="hover-card-meta">${manager} &bull; ${metadata.infoUrl ? `<a href="${metadata.infoUrl}" target="_blank">View Info</a>` : ''}</div>
