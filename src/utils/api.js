@@ -7,14 +7,31 @@
 
 // Store credentials after login
 let authHeader = '';
+let tfaCode = '';
 
 /**
  * Set the Basic Auth credentials.
  */
-export function setCredentials(username, password) {
+export function setCredentials(username, password, persist = true) {
   authHeader = 'Basic ' + btoa(`${username}:${password}`);
-  localStorage.setItem('manejarr_auth', authHeader);
-  localStorage.setItem('manejarr_auth_type', 'basic');
+  if (persist) {
+    localStorage.setItem('manejarr_auth', authHeader);
+    localStorage.setItem('manejarr_auth_type', 'basic');
+  }
+}
+
+/**
+ * Set the 2FA code temporarily.
+ */
+export function setTfaCode(code) {
+  tfaCode = code;
+}
+
+/**
+ * Clear the 2FA code.
+ */
+export function clearTfaCode() {
+  tfaCode = '';
 }
 
 /**
@@ -63,6 +80,10 @@ export async function apiFetch(endpoint, options = {}) {
     headers['Authorization'] = authHeader;
   }
 
+  if (tfaCode) {
+    headers['X-Manejarr-2FA'] = tfaCode;
+  }
+
   const response = await fetch(`/api${endpoint}`, {
     ...options,
     headers,
@@ -77,13 +98,16 @@ export async function apiFetch(endpoint, options = {}) {
 
   if (!response.ok) {
     const text = await response.text();
-    let error;
+    let errorObj;
     try {
-      error = JSON.parse(text);
+      errorObj = JSON.parse(text);
     } catch {
-      error = { error: text };
+      errorObj = { error: text };
     }
-    throw new Error(error.error || `API error: ${response.status}`);
+    
+    // Extract the most useful error message
+    const errorMsg = errorObj.message || errorObj.error || `API error: ${response.status}`;
+    throw new Error(errorMsg);
   }
 
   return response.json();

@@ -48,3 +48,23 @@ CREATE TABLE IF NOT EXISTS torrent_metadata (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+-- WebAuthn Passkeys
+CREATE TABLE IF NOT EXISTS passkeys (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    credential_id  TEXT NOT NULL UNIQUE,
+    public_key     TEXT NOT NULL,
+    counter        INTEGER DEFAULT 0,
+    transports     TEXT,
+    description    TEXT,
+    created_at     TEXT DEFAULT (datetime('now'))
+);
+
+-- Security Verification Tokens (for email confirmations)
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    token      TEXT PRIMARY KEY,
+    type       TEXT NOT NULL, -- '2fa_deactivation', 'passkey_deletion'
+    metadata   TEXT, -- JSON data related to the action
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);

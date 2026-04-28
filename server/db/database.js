@@ -386,3 +386,80 @@ export function compactDatabase(activeHashes) {
 
   return { deleted: hashesToDelete.length };
 }
+
+// ── Passkey helpers ──
+
+export function getPasskeys() {
+  const stmt = db.prepare('SELECT id, credential_id, counter, transports, description, created_at FROM passkeys');
+  const rows = [];
+  while (stmt.step()) {
+    rows.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return rows;
+}
+
+export function getPasskeyById(credentialId) {
+  const stmt = db.prepare('SELECT * FROM passkeys WHERE credential_id = ?');
+  stmt.bind([credentialId]);
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    stmt.free();
+    return row;
+  }
+  stmt.free();
+  return null;
+}
+
+export function insertPasskey(data) {
+  const { credentialId, publicKey, counter, transports, description } = data;
+  db.run(
+    'INSERT INTO passkeys (credential_id, public_key, counter, transports, description) VALUES (?, ?, ?, ?, ?)',
+    [credentialId, publicKey, counter, transports ? JSON.stringify(transports) : null, description]
+  );
+  saveDatabase();
+}
+
+export function updatePasskeyCounter(credentialId, counter) {
+  db.run('UPDATE passkeys SET counter = ? WHERE credential_id = ?', [counter, credentialId]);
+  saveDatabase();
+}
+
+export function deletePasskey(credentialId) {
+  db.run('DELETE FROM passkeys WHERE credential_id = ?', [credentialId]);
+  saveDatabase();
+}
+
+// ── Auth Token helpers ──
+
+export function insertAuthToken(token, type, metadata, expiresAt) {
+  db.run(
+    'INSERT INTO auth_tokens (token, type, metadata, expires_at) VALUES (?, ?, ?, ?)',
+    [token, type, metadata ? JSON.stringify(metadata) : null, expiresAt]
+  );
+  saveDatabase();
+}
+
+export function getAuthToken(token) {
+  const stmt = db.prepare('SELECT * FROM auth_tokens WHERE token = ?');
+  stmt.bind([token]);
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    stmt.free();
+    if (new Date(row.expires_at) < new Date()) {
+      deleteAuthToken(token);
+      return null;
+    }
+    return {
+      ...row,
+      metadata: row.metadata ? JSON.parse(row.metadata) : null
+    };
+  }
+  stmt.free();
+  return null;
+}
+
+export function deleteAuthToken(token) {
+  db.run('DELETE FROM auth_tokens WHERE token = ?', [token]);
+  saveDatabase();
+}

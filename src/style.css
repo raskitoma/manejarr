@@ -91,6 +91,32 @@
   --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
 }
 
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border: 2px solid var(--bg-primary);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+
 /* ── Light Theme Overrides ── */
 .light-theme {
   --bg-primary: #f8fafc;
@@ -592,17 +618,17 @@ input, textarea, select, button {
 
 .form-label {
   display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--space-sm);
+  letter-spacing: 0.08em;
+  margin-bottom: 0.6rem;
 }
 
 .form-input {
   width: 100%;
-  padding: 0.6rem 0.9rem;
+  padding: 0.7rem 1rem;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -630,15 +656,22 @@ input, textarea, select, button {
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
-  align-items: flex-end;
+  gap: var(--space-md) var(--space-lg);
+  align-items: flex-start;
+  margin-bottom: var(--space-lg);
 }
 
 .form-row-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-md);
-  align-items: flex-end;
+  gap: var(--space-md) var(--space-lg);
+  align-items: flex-start;
+  margin-bottom: var(--space-lg);
+}
+
+.form-row:last-child,
+.form-row-3:last-child {
+  margin-bottom: 0;
 }
 
 .form-row .form-group,

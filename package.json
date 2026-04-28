@@ -12,6 +12,8 @@
     "reset-password": "node scripts/reset-password.js"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.0",
     "bcrypt": "^6.0.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
@@ -22,6 +24,8 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
+    "otplib": "^13.4.0",
+    "qrcode": "^1.5.4",
     "sql.js": "^1.11.0"
   },
   "devDependencies": {

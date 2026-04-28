@@ -1,13 +1,13 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { verify } = require('otplib');
 import config from '../config.js';
-import { getSetting } from '../db/database.js';
+import { getSetting, setSetting } from '../db/database.js';
+import { decrypt, encrypt } from '../crypto/encryption.js';
 
-/**
- * Express middleware for Authentication.
- * Supports HTTP Basic Auth and JWT Bearer Tokens.
- */
-export function basicAuth(req, res, next) {
+export async function basicAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -40,7 +40,6 @@ export function basicAuth(req, res, next) {
   const expectedHash = getSetting('admin_password_hash') || config.adminPasswordHash || '';
 
   if (!expectedHash) {
-    // No password configured — reject all requests
     console.warn('[AUTH] No admin password hash configured. Rejecting all requests.');
     return res.status(401).json({ error: 'Server not configured. Run deploy.sh first.' });
   }
@@ -49,16 +48,61 @@ export function basicAuth(req, res, next) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // bcrypt compare is async
-  bcrypt.compare(password, expectedHash).then(match => {
-    if (match) {
-      req.user = { username };
-      next();
-    } else {
+  try {
+    const match = await bcrypt.compare(password, expectedHash);
+    if (!match) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-  }).catch(err => {
-    console.error('[AUTH] bcrypt error:', err);
+
+    // Check 2FA
+    const tfaEnabled = getSetting('2fa_enabled') === '1';
+    if (tfaEnabled) {
+      const tfaCode = req.headers['x-manejarr-2fa'];
+      if (!tfaCode) {
+        return res.status(403).json({ error: '2FA_REQUIRED', message: 'Two-factor authentication code required' });
+      }
+
+      const secret = decrypt(getSetting('2fa_secret'));
+      let verified = false;
+      let usedRecovery = false;
+
+      // 1. Try TOTP first only if it looks like a TOTP code (6 digits)
+      if (tfaCode.length === 6 && /^\d+$/.test(tfaCode)) {
+        try {
+          const totpResult = await verify({ token: tfaCode, secret, window: 1 });
+          verified = totpResult.valid;
+        } catch (e) {
+          console.warn('[AUTH] TOTP verification failed:', e.message);
+        }
+      }
+
+      // 2. If not verified by TOTP, check recovery codes
+      if (!verified) {
+        const encryptedCodes = getSetting('2fa_recovery_codes');
+        const recoveryCodes = encryptedCodes ? JSON.parse(decrypt(encryptedCodes)) : [];
+        const codeIndex = recoveryCodes.indexOf(tfaCode.toUpperCase());
+
+        if (codeIndex !== -1) {
+          verified = true;
+          usedRecovery = true;
+          // Valid recovery code — remove it after use
+          recoveryCodes.splice(codeIndex, 1);
+          setSetting('2fa_recovery_codes', encrypt(JSON.stringify(recoveryCodes)));
+        }
+      }
+
+      if (!verified) {
+        return res.status(403).json({ 
+          error: 'INVALID_2FA', 
+          message: tfaCode.length !== 6 ? 'Invalid recovery code' : 'Invalid 2FA code' 
+        });
+      }
+    }
+
+    req.user = { username };
+    return next();
+  } catch (err) {
+    console.error('[AUTH] bcrypt/2fa error:', err);
     return res.status(500).json({ error: 'Internal authentication error' });
-  });
+  }
 }

@@ -2,9 +2,12 @@
  * Modal Component
  */
 
-export function showModal({ title, content, footer, onClose, dismissible = true }) {
+export function showModal({ title, content, footer, onClose, dismissible = true, closeOnOutsideClick = undefined }) {
   const overlay = document.getElementById('modal-overlay');
   if (!overlay) return;
+
+  // Default closeOnOutsideClick to the same as dismissible if not specified
+  const shouldCloseOnOutside = closeOnOutsideClick !== undefined ? closeOnOutsideClick : dismissible;
 
   overlay.classList.remove('hidden');
   overlay.innerHTML = `
@@ -27,6 +30,9 @@ export function showModal({ title, content, footer, onClose, dismissible = true 
 
   if (dismissible) {
     overlay.querySelector('#modal-close-btn')?.addEventListener('click', close);
+  }
+
+  if (shouldCloseOnOutside) {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });

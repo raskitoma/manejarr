@@ -21,7 +21,9 @@ export async function notifyRunComplete(summary) {
   // ── Email ──
   try {
     const emailEnabled = getSetting('notify_email_enabled');
-    if (emailEnabled === '1' || emailEnabled === 'true') {
+    const emailValidated = getSetting('notify_email_validated') === '1';
+    
+    if ((emailEnabled === '1' || emailEnabled === 'true') && emailValidated) {
       const config = {
         host: getSetting('notify_email_host'),
         port: getSetting('notify_email_port'),
@@ -49,7 +51,9 @@ export async function notifyRunComplete(summary) {
   // ── Telegram ──
   try {
     const tgEnabled = getSetting('notify_telegram_enabled');
-    if (tgEnabled === '1' || tgEnabled === 'true') {
+    const tgValidated = getSetting('notify_telegram_validated') === '1';
+
+    if ((tgEnabled === '1' || tgEnabled === 'true') && tgValidated) {
       const config = {
         botToken: decryptSafe(getSetting('notify_telegram_bot_token')),
         chatId: getSetting('notify_telegram_chat_id'),

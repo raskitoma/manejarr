@@ -7,6 +7,9 @@ import logsRouter from './logs.js';
 import { torrentsRouter } from './torrents.js';
 import authRouter from './auth.js';
 
+import jwt from 'jsonwebtoken';
+import config from '../config.js';
+
 const router = Router();
 
 router.use('/auth', authRouter);
@@ -19,7 +22,15 @@ router.use('/torrents', torrentsRouter);
 
 // Auth verification endpoint (auth required)
 router.get('/verify', (req, res) => {
-  res.json({ success: true, user: req.user });
+  // Generate a JWT to "upgrade" the Basic Auth session to a Bearer session
+  // This prevents having to send 2FA codes with every request
+  const token = jwt.sign(
+    { username: req.user.username },
+    config.encryptionKey,
+    { expiresIn: '7d' }
+  );
+  
+  res.json({ success: true, user: req.user, token });
 });
 
 export default router;

@@ -1,13 +1,25 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import config from '../config.js';
-import { getSetting, setSetting, getAllSettings, compactDatabase } from '../db/database.js';
+import { 
+  getSetting, 
+  setSetting, 
+  getAllSettings, 
+  compactDatabase,
+  getPasskeys,
+  insertAuthToken,
+  getAuthToken,
+  deleteAuthToken
+} from '../db/database.js';
 import { encrypt, decrypt, isEncrypted } from '../crypto/encryption.js';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
 import { sendTestNotification } from '../notifications/notifier.js';
 import { testTelegram } from '../notifications/telegram.js';
+import { notifyGoogleLinkStatus } from '../notifications/authEmail.js';
+import { sendEmail } from '../notifications/email.js';
+import { sendTelegram } from '../notifications/telegram.js';
 
 const router = Router();
 
@@ -32,6 +44,8 @@ const SETTING_KEYS = [
   'notify_telegram_enabled', 'notify_telegram_bot_token', 'notify_telegram_chat_id',
   'log_retention_days',
   'google_auth_enabled', 'google_client_id', 'google_client_secret', 'google_user_id',
+  'notify_email_validated', 'notify_telegram_validated',
+  '2fa_enabled',
 ];
 
 /**
@@ -71,6 +85,7 @@ router.get('/', (req, res) => {
 router.put('/', (req, res) => {
   try {
     const updates = req.body;
+    const oldGoogleId = getSetting('google_user_id');
 
     for (const [key, value] of Object.entries(updates)) {
       if (!SETTING_KEYS.includes(key)) continue;
@@ -79,11 +94,31 @@ router.put('/', (req, res) => {
       if (SENSITIVE_KEYS.includes(key) && value === '••••••••') continue;
 
       if (SENSITIVE_KEYS.includes(key) && value) {
-        // Encrypt sensitive values
         setSetting(key, encrypt(value));
       } else {
         setSetting(key, value);
       }
+    }
+
+    // Notify on Google link change
+    const newGoogleId = getSetting('google_user_id');
+    if (oldGoogleId !== newGoogleId) {
+      const isLinked = !!newGoogleId;
+      notifyGoogleLinkStatus(isLinked, isLinked ? 'your Google account' : null).catch(console.error);
+    }
+
+    // Constraint: Cannot disable email if security features are active
+    const emailEnabled = getSetting('notify_email_enabled') === '1';
+    const securityActive = 
+      getSetting('2fa_enabled') === '1' || 
+      getSetting('google_auth_enabled') === '1' || 
+      getPasskeys().length > 0;
+
+    if (!emailEnabled && securityActive) {
+      setSetting('notify_email_enabled', '1');
+      return res.status(400).json({ 
+        error: 'Cannot disable email notifications while security features (2FA, Google, Passkey) are active.' 
+      });
     }
 
     res.json({ success: true, message: 'Settings saved' });
@@ -91,6 +126,66 @@ router.put('/', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * POST /api/settings/validate/send
+ * Sends a verification code to the specified channel.
+ */
+router.post('/validate/send', async (req, res) => {
+  const { channel } = req.body;
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const token = `val_${channel}_${Date.now()}`;
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+
+  insertAuthToken(token, `validate_${channel}`, { code }, expiresAt);
+
+  try {
+    if (channel === 'email') {
+      const config = {
+        host: getSetting('notify_email_host'),
+        port: getSetting('notify_email_port'),
+        username: getSetting('notify_email_username'),
+        password: decryptSafe(getSetting('notify_email_password')),
+        from: getSetting('notify_email_from'),
+        to: getSetting('notify_email_to'),
+      };
+      await sendEmail(config, '[Manejarr] Verification Code', `Your verification code is: ${code}\n\nThis code will expire in 10 minutes.`);
+    } else if (channel === 'telegram') {
+      const config = {
+        botToken: decryptSafe(getSetting('notify_telegram_bot_token')),
+        chatId: getSetting('notify_telegram_chat_id'),
+      };
+      await sendTelegram(config, `🧪 *Manejarr Verification*\n\nYour verification code is: \`${code}\`\n\nThis code will expire in 10 minutes.`);
+    }
+
+    res.json({ success: true, token });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to send code: ${err.message}` });
+  }
+});
+
+/**
+ * POST /api/settings/validate/verify
+ * Verifies the code and marks the channel as validated.
+ */
+router.post('/validate/verify', async (req, res) => {
+  const { channel, code, token } = req.body;
+  const authToken = getAuthToken(token);
+
+  if (!authToken || authToken.type !== `validate_${channel}` || authToken.metadata.code !== code) {
+    return res.status(400).json({ error: 'Invalid or expired verification code' });
+  }
+
+  setSetting(`notify_${channel}_validated`, '1');
+  deleteAuthToken(token);
+
+  res.json({ success: true });
+});
+
+function decryptSafe(value) {
+  if (!value) return '';
+  try { return decrypt(value); } catch { return value; }
+}
 
 /**
  * POST /api/settings/test

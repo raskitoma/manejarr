@@ -109,6 +109,10 @@ const DICTIONARY = {
     sign_in: 'Sign In',
     sign_in_title: 'Sign In to Manejarr',
     enter_admin: 'Enter your admin credentials',
+    verification_required: 'Verification required',
+    two_fa_code: 'Security Code',
+    back_to_password: 'Back to password',
+    enter_2fa_code: 'Enter the 6-digit code from your app or a recovery code.',
 
     // Theme & Language
     light_mode: 'Light',
@@ -224,6 +228,10 @@ const DICTIONARY = {
     sign_in: 'Iniciar Sesión',
     sign_in_title: 'Iniciar Sesión en Manejarr',
     enter_admin: 'Introduce tus credenciales de administrador',
+    verification_required: 'Verificación requerida',
+    two_fa_code: 'Código de seguridad',
+    back_to_password: 'Volver a la contraseña',
+    enter_2fa_code: 'Introduce el código de 6 dígitos de tu app o un código de recuperación.',
 
     // Theme & Language
     light_mode: 'Modo Claro',
