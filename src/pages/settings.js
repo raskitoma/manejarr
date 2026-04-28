@@ -376,6 +376,25 @@ export async function renderSettings() {
           </div>
         </div>
 
+        <div class="service-section">
+          <div class="service-header">
+            <div class="service-title">
+              <div class="service-icon" style="background: rgba(139, 92, 246, 0.15); color: #8b5cf6;">🌐</div>
+              <span>Environment</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="form-group">
+              <label class="form-label" for="base_url">Base URL</label>
+              <input type="url" id="base_url" class="form-input" placeholder="https://manejarr.raskitoma.com" />
+              <span class="form-hint">The public URL where Manejarr is accessible. Used for OAuth redirects and notifications.</span>
+            </div>
+            <div class="flex justify-end mt-md">
+              <button class="btn btn-primary" id="save-env-btn">Save Environment</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Google OAuth Configuration -->
         <div class="service-section mt-lg">
           <div class="service-header">
@@ -441,6 +460,7 @@ export async function renderSettings() {
   document.getElementById('test-sonarr-btn')?.addEventListener('click', () => saveAndTestService('sonarr'));
 
   document.getElementById('save-rules-btn')?.addEventListener('click', () => saveSettings('Rules saved successfully'));
+  document.getElementById('save-env-btn')?.addEventListener('click', () => saveSettings('Environment settings saved'));
 
   document.getElementById('test-email-btn')?.addEventListener('click', () => saveAndTestNotification('email'));
   document.getElementById('test-telegram-btn')?.addEventListener('click', () => saveAndTestNotification('telegram'));
@@ -720,6 +740,7 @@ async function loadSettings() {
     document.getElementById('google_auth_enabled').checked = settings.google_auth_enabled === '1' || settings.google_auth_enabled === 'true';
     document.getElementById('google_client_id').value = settings.google_client_id || '';
     document.getElementById('google_client_secret').value = settings.google_client_secret || '';
+    document.getElementById('base_url').value = settings.base_url || '';
     
     updateGoogleAccountVisibility();
     
@@ -900,6 +921,7 @@ async function saveSettings(successMessage) {
       google_auth_enabled: document.getElementById('google_auth_enabled').checked ? '1' : '0',
       google_client_id: document.getElementById('google_client_id').value,
       google_client_secret: document.getElementById('google_client_secret').value,
+      base_url: document.getElementById('base_url').value,
     };
 
     await api.put('/settings', settings);

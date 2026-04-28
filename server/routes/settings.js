@@ -46,6 +46,7 @@ const SETTING_KEYS = [
   'google_auth_enabled', 'google_client_id', 'google_client_secret', 'google_user_id',
   'notify_email_validated', 'notify_telegram_validated',
   '2fa_enabled',
+  'base_url',
 ];
 
 /**
