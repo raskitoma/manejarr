@@ -292,7 +292,9 @@ export async function renderSettings() {
         <div class="service-section mt-lg" id="google-account-section">
           <div class="service-header">
             <div class="service-title">
-              <div class="service-icon" style="background: rgba(66, 133, 244, 0.15); color: #4285f4;">G</div>
+              <div class="service-icon" style="background: rgba(66, 133, 244, 0.1); padding: 6px;">
+                <svg width="20" height="20" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.49h4.84c-.21 1.12-.84 2.07-1.79 2.7l2.85 2.22c1.67-1.53 2.63-3.79 2.63-6.57z" fill="#4285F4"/><path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.85-2.22c-.79.53-1.8.84-3.11.84-2.39 0-4.41-1.61-5.13-3.77L1.01 13.3C2.49 16.24 5.51 18 9 18z" fill="#34A853"/><path d="M3.87 10.67c-.18-.53-.28-1.1-.28-1.67s.1-1.14.28-1.67l-2.86-2.22C.39 6.24 0 7.58 0 9s.39 2.76 1.01 3.89l2.86-2.22z" fill="#FBBC05"/><path d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.51 0 2.49 1.76 1.01 4.7L3.87 6.92c.72-2.16 2.74-3.77 5.13-3.77z" fill="#EA4335"/></svg>
+              </div>
               <span>Google Account</span>
             </div>
           </div>
@@ -550,17 +552,8 @@ async function linkGoogleAccount() {
       
       if (event.data.type === 'google-auth-link') {
         const { googleUserId, email } = event.data;
-        
-        // Save the linked ID
-        try {
-          await api.put('/settings', { google_user_id: googleUserId });
-          showToast(`Linked to ${email}`, 'success');
-          loadSettings(); // Refresh UI
-        } catch (err) {
-          showToast('Failed to save link: ' + err.message, 'error');
-        }
-        
-        window.removeEventListener('message', handleMessage);
+        completeLinking(googleUserId, email);
+        clearInterval(checkClosed);
       } else if (event.data.type === 'google-auth-success') {
         // This shouldn't happen during linking unless they were already linked
         showToast('Account already linked and authenticated', 'success');
@@ -570,14 +563,44 @@ async function linkGoogleAccount() {
     
     window.addEventListener('message', handleMessage);
 
-    // Check if popup closed without message
+    // Check if popup closed or if localStorage has the data (fallback for window.opener issues)
     const checkClosed = setInterval(() => {
+      // 1. Check for localStorage bridge data
+      const linkDataRaw = localStorage.getItem('manejarr_google_link');
+      if (linkDataRaw) {
+        localStorage.removeItem('manejarr_google_link');
+        try {
+          const { googleUserId, email } = JSON.parse(linkDataRaw);
+          completeLinking(googleUserId, email);
+          clearInterval(checkClosed);
+          if (!popup.closed) popup.close();
+          return;
+        } catch (e) {
+          console.error('[AUTH] Failed to parse link data from storage:', e);
+        }
+      }
+
+      // 2. Check if popup was closed manually
       if (popup.closed) {
         clearInterval(checkClosed);
         btn.disabled = false;
         btn.textContent = '🔗 Link Account';
       }
     }, 1000);
+
+    const completeLinking = async (googleUserId, email) => {
+      try {
+        await api.put('/settings', { google_user_id: googleUserId });
+        showToast(`Linked to ${email}`, 'success');
+        loadSettings(); // Refresh UI
+      } catch (err) {
+        showToast('Failed to save link: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔗 Link Account';
+        window.removeEventListener('message', handleMessage);
+      }
+    };
 
   } catch (err) {
     showToast('Failed to start Google Auth: ' + err.message, 'error');

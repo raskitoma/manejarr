@@ -436,18 +436,29 @@ router.get('/google/callback', async (req, res) => {
                   const targetOrigin = window.location.origin;
                   const data = { type: 'google-auth-success', token: '${token}' };
                   
+                  // Save to localStorage as a fallback for browsers that block window.opener
+                  localStorage.setItem('manejarr_google_auth', JSON.stringify(data));
+                  
                   if (window.opener) {
                     try {
                       window.opener.postMessage(data, targetOrigin);
                       window.close();
                     } catch (e) {
                       console.error('PostMessage failed:', e);
-                      window.location.href = "/#/?google_token=${token}";
                     }
-                  } else {
-                    // Fallback for browsers that block window.opener
-                    window.location.href = "/#/?google_token=${token}";
                   }
+                  
+                  // Display success message and close button
+                  document.body.innerHTML = \`
+                    <div style="text-align: center; padding: 20px;">
+                      <h2 style="color: #4ade80;">✓ Signed In</h2>
+                      <p>You have been successfully authenticated.</p>
+                      <button onclick="window.close()" style="background: #4285f4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 10px;">Close Window</button>
+                    </div>
+                  \`;
+                  
+                  // Auto-close after 2 seconds
+                  setTimeout(() => window.close(), 2000);
                 })();
               </script>
             </div>
@@ -460,11 +471,13 @@ router.get('/google/callback', async (req, res) => {
         <html>
           <body style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; background: #1a1a1a; color: white;">
             <div style="text-align: center;">
-              <div style="margin-bottom: 20px;">Linking account...</div>
               <script>
                 (function() {
                   const targetOrigin = window.location.origin;
                   const data = { type: 'google-auth-link', googleUserId: '${googleUserId}', email: '${payload.email}' };
+                  
+                  // Save to localStorage as a fallback for browsers that block window.opener
+                  localStorage.setItem('manejarr_google_link', JSON.stringify(data));
                   
                   if (window.opener) {
                     try {
@@ -472,12 +485,21 @@ router.get('/google/callback', async (req, res) => {
                       window.close();
                     } catch (e) {
                       console.error('PostMessage failed:', e);
-                      window.location.href = "/#/settings?google_link_id=${googleUserId}&google_email=${payload.email}";
                     }
-                  } else {
-                    // Fallback for browsers that block window.opener
-                    window.location.href = "/#/settings?google_link_id=${googleUserId}&google_email=${payload.email}";
                   }
+                  
+                  // Display success message and close button
+                  document.body.innerHTML = \`
+                    <div style="text-align: center; padding: 20px;">
+                      <h2 style="color: #4ade80;">✓ Account Linked</h2>
+                      <p>Your Google account (<b>${payload.email}</b>) is now ready to be linked.</p>
+                      <p style="font-size: 0.9rem; color: #aaa;">You can now close this window and return to Settings.</p>
+                      <button onclick="window.close()" style="background: #4285f4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 10px;">Close Window</button>
+                    </div>
+                  \`;
+
+                  // Auto-close after 2 seconds
+                  setTimeout(() => window.close(), 2000);
                 })();
               </script>
             </div>
