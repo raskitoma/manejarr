@@ -154,6 +154,24 @@ export function createRadarrClient({ host, port, apiKey }) {
     return request(`/qualityprofile/${profileId}`);
   }
 
+  /**
+   * Search for movies by name using Radarr's lookup endpoint.
+   */
+  async function searchMovies(term) {
+    const results = await request(`/movie/lookup?term=${encodeURIComponent(term)}`);
+    return (results || []).slice(0, 20).map(m => ({
+      id: m.id || m.tmdbId,
+      internalId: m.id || null,
+      tmdbId: m.tmdbId,
+      title: m.title,
+      year: m.year,
+      overview: m.overview ? m.overview.substring(0, 200) : '',
+      poster: m.images?.find(i => i.coverType === 'poster')?.remoteUrl || null,
+      status: m.status || (m.id ? 'inLibrary' : 'notInLibrary'),
+      inLibrary: !!m.id,
+    }));
+  }
+
   return {
     testConnection,
     getMovies,
@@ -164,6 +182,7 @@ export function createRadarrClient({ host, port, apiKey }) {
     setUnmonitored,
     getQualityProfiles,
     getQualityProfile,
+    searchMovies,
     request,
     requestRaw,
   };

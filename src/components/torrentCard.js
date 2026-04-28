@@ -29,12 +29,20 @@ export function renderTorrentRow(torrent) {
         </div>
       </td>
       <td>
-        ${torrent.managerUrl 
-          ? `<a href="${torrent.managerUrl}" target="_blank" class="badge-link"><span class="badge ${managerClass}">${torrent.manager}</span></a>`
-          : (torrent.manager 
-            ? `<span class="badge ${managerClass}">${torrent.manager}</span>` 
-            : `<button class="btn btn-sm btn-secondary link-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}">🔗 Link</button>`)
-        }
+        <div class="manager-cell">
+          ${torrent.manager 
+            ? `<div class="manager-badge-container">
+                 ${torrent.managerUrl 
+                   ? `<a href="${torrent.managerUrl}" target="_blank" class="badge-link"><span class="badge ${managerClass}">${torrent.manager}</span></a>`
+                   : `<span class="badge ${managerClass}">${torrent.manager}</span>`
+                 }
+                 <button class="btn-icon link-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}" title="Rematch">
+                   <span class="icon">🔄</span>
+                 </button>
+               </div>`
+            : `<button class="btn btn-sm btn-secondary link-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}">🔗 Link</button>`
+          }
+        </div>
       </td>
       <td><span class="badge ${labelClass}">${torrent.label || 'none'}</span></td>
       <td class="text-mono" data-val="${torrent.ratio}">${formatRatio(torrent.ratio)}</td>

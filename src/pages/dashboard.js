@@ -128,7 +128,7 @@ function initDashboardEvents() {
   let hideTimeout = null;
   
   if (tableBody && hoverCard) {
-    const showCard = (metadata, manager, targetTr) => {
+    const showCard = (metadata, manager, targetTr, mouseX, mouseY) => {
       if (hideTimeout) clearTimeout(hideTimeout);
       
       // Find poster image
@@ -153,16 +153,20 @@ function initDashboardEvents() {
       
       hoverCard.classList.add('visible');
       
-      // Position card
-      const rect = targetTr.getBoundingClientRect();
+      // Position card: offset from cursor to not block it
       const cardHeight = 380;
       const cardWidth = 200;
-      let top = rect.top;
-      let left = rect.left + 300;
-
+      
+      let top = mouseY - 100; // Center slightly vertically
+      let left = mouseX + 20; // 20px to the right of cursor
+      
       // Adjust if off screen
       if (top + cardHeight > window.innerHeight) top = window.innerHeight - cardHeight - 20;
-      if (left + cardWidth > window.innerWidth) left = rect.left - cardWidth - 20;
+      if (top < 20) top = 20;
+      
+      if (left + cardWidth > window.innerWidth) {
+        left = mouseX - cardWidth - 20; // Show on left if no room on right
+      }
 
       hoverCard.style.top = `${top}px`;
       hoverCard.style.left = `${left}px`;
@@ -171,41 +175,35 @@ function initDashboardEvents() {
     const hideCard = () => {
       hideTimeout = setTimeout(() => {
         hoverCard.classList.remove('visible');
-      }, 300);
+        hoverCard.dataset.currentTr = '';
+      }, 100);
     };
 
-    tableBody.addEventListener('mouseover', (e) => {
+    tableBody.addEventListener('mousemove', (e) => {
       const tr = e.target.closest('tr');
-      if (!tr || !tr.dataset.metadata) return;
-      
-      // If we are already showing this TR, do nothing
-      if (hoverCard.classList.contains('visible') && hoverCard.dataset.currentTr === tr.dataset.hash) {
-        if (hideTimeout) clearTimeout(hideTimeout);
+      if (!tr || !tr.dataset.metadata) {
+        hideCard();
         return;
       }
-
-      try {
-        const metadata = JSON.parse(tr.dataset.metadata);
-        const manager = tr.dataset.manager;
-        showCard(metadata, manager, tr);
-        hoverCard.dataset.currentTr = tr.dataset.hash;
-      } catch (err) {}
+      
+      const metadata = JSON.parse(tr.dataset.metadata);
+      const manager = tr.dataset.manager;
+      
+      // Update position even if already visible for same TR
+      showCard(metadata, manager, tr, e.clientX, e.clientY);
+      hoverCard.dataset.currentTr = tr.dataset.hash;
     });
 
-    tableBody.addEventListener('mouseout', (e) => {
-      // Only hide if we are leaving the TR (to nothing or outside tableBody)
-      const toElement = e.relatedTarget;
-      if (toElement && toElement.closest('tr') === e.target.closest('tr')) {
-        return; // Still in same row
-      }
+    tableBody.addEventListener('mouseleave', () => {
       hideCard();
     });
 
-    hoverCard.addEventListener('mouseover', () => {
+    // Allow clicking links in the hover card
+    hoverCard.addEventListener('mouseenter', () => {
       if (hideTimeout) clearTimeout(hideTimeout);
     });
 
-    hoverCard.addEventListener('mouseout', () => {
+    hoverCard.addEventListener('mouseleave', () => {
       hideCard();
     });
   }
@@ -394,68 +392,198 @@ export function cleanupDashboard() {
   }
 }
 
+function cleanTorrentName(name) {
+  // Remove common release tags, quality indicators, group names etc.
+  return name
+    .replace(/\.(mkv|avi|mp4|wmv|flv|mov|m4v)$/i, '')
+    .replace(/[\.\-_]/g, ' ')
+    .replace(/\b(720p|1080p|2160p|4K|HDR|DV|BluRay|BRRip|WEBRip|WEB-DL|HDTV|DVDRip|x264|x265|HEVC|H264|H265|AAC|DD5\.?1|DTS|ATMOS|REMUX|PROPER|REPACK|EXTENDED|UNRATED|DIRECTORS\.?CUT)\b/gi, '')
+    .replace(/\b(S\d{1,2}E?\d{0,2})\b/gi, '') // Season/episode tags
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function openLinkModal(hash, name) {
+  const cleanedName = cleanTorrentName(name);
+  let searchTimeout = null;
+  let currentResults = [];
+  
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.style.display = 'flex';
   
   const modal = document.createElement('div');
-  modal.className = 'modal-content';
-  modal.style.maxWidth = '500px';
+  modal.className = 'modal-content match-search-modal';
   
   modal.innerHTML = `
-    <h3>Link Torrent to Manager</h3>
-    <p class="text-muted" style="margin-bottom: var(--space-md); word-break: break-all;"><strong>${name}</strong></p>
+    <h3>${t('link_torrent') || 'Link Torrent to Media'}</h3>
+    <p class="text-muted match-search-torrent-name" title="${name}">${name}</p>
     
-    <div class="form-group">
-      <label class="form-label">Manager</label>
-      <select id="link-manager" class="form-input">
-        <option value="radarr">Radarr (Movie)</option>
-        <option value="sonarr">Sonarr (Series)</option>
-      </select>
+    <div class="match-search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="match-search-input" class="form-input" placeholder="${t('search_media') || 'Search movies & series...'}" value="${cleanedName}" autofocus>
+      <div id="match-search-spinner" class="match-spinner hidden">
+        <div class="spinner-sm"></div>
+      </div>
     </div>
     
-    <div class="form-group">
-      <label class="form-label">Media ID</label>
-      <input type="number" id="link-id" class="form-input" placeholder="e.g. 123" required>
-      <small class="text-muted" style="display: block; margin-top: 5px;">Enter the internal ID from Radarr/Sonarr (found in the URL of the media item).</small>
+    <div id="match-search-results" class="match-search-results">
+      <div class="match-search-hint">
+        <span class="match-search-hint-icon">💡</span>
+        ${t('search_hint') || 'Type to search Radarr & Sonarr for matching media'}
+      </div>
     </div>
     
-    <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
-      <button class="btn btn-primary flex-1" id="link-submit-btn">Link Torrent</button>
-      <button class="btn btn-secondary flex-1" id="link-cancel-btn">Cancel</button>
+    <div class="match-modal-footer">
+      <button class="btn btn-secondary" id="match-cancel-btn">${t('cancel') || 'Cancel'}</button>
     </div>
   `;
   
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   
-  document.getElementById('link-cancel-btn').onclick = () => document.body.removeChild(overlay);
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeMatchModal();
+  });
   
-  document.getElementById('link-submit-btn').onclick = async () => {
-    const manager = document.getElementById('link-manager').value;
-    const id = document.getElementById('link-id').value;
+  const closeMatchModal = () => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    document.body.removeChild(overlay);
+  };
+  
+  document.getElementById('match-cancel-btn').onclick = closeMatchModal;
+  
+  const searchInput = document.getElementById('match-search-input');
+  const resultsContainer = document.getElementById('match-search-results');
+  const spinner = document.getElementById('match-search-spinner');
+  
+  const performSearch = async (query) => {
+    if (!query || query.trim().length < 2) {
+      resultsContainer.innerHTML = `
+        <div class="match-search-hint">
+          <span class="match-search-hint-icon">💡</span>
+          ${t('search_hint') || 'Type to search Radarr & Sonarr for matching media'}
+        </div>
+      `;
+      return;
+    }
     
-    if (!id) {
-      showToast('Please enter a Media ID', 'error');
+    spinner.classList.remove('hidden');
+    
+    try {
+      const data = await api.get(`/torrents/search?q=${encodeURIComponent(query.trim())}`);
+      currentResults = data.results || [];
+      
+      if (currentResults.length === 0) {
+        resultsContainer.innerHTML = `
+          <div class="match-search-empty">
+            <div class="match-search-empty-icon">🔍</div>
+            <div>${t('no_results') || 'No results found'}</div>
+            <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">Try different keywords</div>
+          </div>
+        `;
+      } else {
+        resultsContainer.innerHTML = currentResults.map((r, i) => `
+          <div class="match-result-item ${r.inLibrary ? 'in-library' : 'not-in-library'}" data-index="${i}">
+            <div class="match-result-poster">
+              ${r.poster 
+                ? `<img src="${r.poster}" alt="" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'match-poster-fallback\\'>${r.manager === 'radarr' ? '🎬' : '📺'}</div>'">`
+                : `<div class="match-poster-fallback">${r.manager === 'radarr' ? '🎬' : '📺'}</div>`
+              }
+            </div>
+            <div class="match-result-info">
+              <div class="match-result-title">${r.title}</div>
+              <div class="match-result-meta">
+                <span class="badge badge-${r.manager}">${r.manager === 'radarr' ? 'Movie' : 'Series'}</span>
+                ${r.year ? `<span class="match-result-year">${r.year}</span>` : ''}
+                ${r.inLibrary ? `<span class="match-library-tag">✓ In Library</span>` : ''}
+                ${r.seasonCount ? `<span class="text-muted">${r.seasonCount} season${r.seasonCount > 1 ? 's' : ''}</span>` : ''}
+              </div>
+              ${r.overview ? `<div class="match-result-overview">${r.overview}</div>` : ''}
+            </div>
+            <div class="match-result-action">
+              <button class="btn btn-sm btn-primary match-link-btn" data-index="${i}">Link</button>
+            </div>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      resultsContainer.innerHTML = `
+        <div class="match-search-empty">
+          <div class="match-search-empty-icon">⚠️</div>
+          <div>Search failed: ${err.message}</div>
+        </div>
+      `;
+    } finally {
+      spinner.classList.add('hidden');
+    }
+  };
+  
+  // Debounced search on input
+  searchInput.addEventListener('input', (e) => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => performSearch(e.target.value), 400);
+  });
+  
+  // Handle Enter key
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (searchTimeout) clearTimeout(searchTimeout);
+      performSearch(searchInput.value);
+    }
+  });
+  
+  // Handle result clicks (delegation)
+  resultsContainer.addEventListener('click', async (e) => {
+    const linkBtn = e.target.closest('.match-link-btn');
+    const resultItem = e.target.closest('.match-result-item');
+    const target = linkBtn || resultItem;
+    if (!target) return;
+    
+    const index = parseInt(target.dataset.index, 10);
+    const result = currentResults[index];
+    if (!result) return;
+    
+    // Use the internal Radarr/Sonarr ID if in library, otherwise external ID
+    const mediaId = result.internalId || result.id;
+    
+    if (!result.inLibrary) {
+      showToast('This media is not in your library yet. Add it to Radarr/Sonarr first.', 'warning');
       return;
     }
     
     try {
-      const btn = document.getElementById('link-submit-btn');
-      btn.disabled = true;
-      btn.innerText = 'Linking...';
+      // Disable all link buttons
+      resultsContainer.querySelectorAll('.match-link-btn').forEach(b => { b.disabled = true; });
+      target.closest('.match-result-item')?.classList.add('linking');
       
-      await api.post(`/torrents/${hash}/match`, { manager, id });
-      showToast('Torrent manually linked successfully!', 'success');
-      document.body.removeChild(overlay);
+      await api.post(`/torrents/${hash}/match`, { 
+        manager: result.manager, 
+        id: mediaId,
+        title: result.title
+      });
       
-      // Reload dashboard data to show the new badge
+      showToast(`${t('link_success') || 'Linked successfully to'} "${result.title}"`, 'success');
+      closeMatchModal();
       loadDashboardData();
     } catch (err) {
       showToast(err.message, 'error');
-      document.getElementById('link-submit-btn').disabled = false;
-      document.getElementById('link-submit-btn').innerText = 'Link Torrent';
+      resultsContainer.querySelectorAll('.match-link-btn').forEach(b => { b.disabled = false; });
+      target.closest('.match-result-item')?.classList.remove('linking');
     }
-  };
+  });
+  
+  // Auto-search with cleaned name
+  if (cleanedName.length >= 2) {
+    performSearch(cleanedName);
+  }
+  
+  // Focus and select the search input
+  setTimeout(() => {
+    searchInput.focus();
+    searchInput.select();
+  }, 100);
 }

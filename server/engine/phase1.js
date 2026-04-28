@@ -268,8 +268,15 @@ export async function executePhase1(clients, settings, options = {}, log) {
         const sonarrMatch = torrent._match || await sonarr.getEpisodesByHash(torrent.hash);
         
         if (!sonarrMatch) {
-          log('warn', 'sonarr', `Cache mismatch: Could not find episodes for ${torrent.name} in Sonarr anymore. Skipping.`);
-          // Not falling back further for now as Sonarr is the last check
+          log('warn', 'sonarr', `Cache mismatch or no episodes found for "${torrent.name}" in Sonarr. Skipping.`);
+          summary.details.push({
+            hash: torrent.hash,
+            name: torrent.name,
+            action: 'skipped',
+            reason: 'Series or episodes not found in Sonarr',
+            manager: 'sonarr',
+          });
+          continue;
         } else {
           log('info', 'sonarr', `Matched torrent "${torrent.name}" to series ID ${sonarrMatch.seriesId}`);
 
@@ -332,6 +339,17 @@ export async function executePhase1(clients, settings, options = {}, log) {
               episodes: episodeIds.length,
               allQualityMet,
               limitMet,
+              metadata: buildSonarrMetadata(series),
+            });
+            continue;
+          } else {
+            log('warn', 'sonarr', `Series "${series.title}" has no imported files for this torrent yet, skipping`);
+            summary.details.push({
+              hash: torrent.hash,
+              name: torrent.name,
+              action: 'skipped',
+              reason: 'No imported files in Sonarr',
+              manager: 'sonarr',
               metadata: buildSonarrMetadata(series),
             });
             continue;

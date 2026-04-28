@@ -121,6 +121,13 @@ const DICTIONARY = {
     english: 'English',
     spanish: 'Spanish',
     reset: 'Reset',
+
+    // Torrent Match
+    link_torrent: 'Link Torrent to Media',
+    search_media: 'Search movies & series...',
+    search_hint: 'Type to search Radarr & Sonarr for matching media',
+    no_results: 'No results found',
+    link_success: 'Linked successfully to',
   },
   es: {
     // General
@@ -238,6 +245,13 @@ const DICTIONARY = {
     dark_mode: 'Modo Oscuro',
     language: 'Idioma',
     reset: 'Limpiar',
+
+    // Torrent Match
+    link_torrent: 'Vincular Torrent a Multimedia',
+    search_media: 'Buscar películas y series...',
+    search_hint: 'Escribe para buscar en Radarr y Sonarr',
+    no_results: 'No se encontraron resultados',
+    link_success: 'Vinculado correctamente a',
   }
 };
 

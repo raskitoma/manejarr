@@ -179,6 +179,25 @@ export function createSonarrClient({ host, port, apiKey }) {
     return request(`/qualityprofile/${profileId}`);
   }
 
+  /**
+   * Search for series by name using Sonarr's lookup endpoint.
+   */
+  async function searchSeries(term) {
+    const results = await request(`/series/lookup?term=${encodeURIComponent(term)}`);
+    return (results || []).slice(0, 20).map(s => ({
+      id: s.id || s.tvdbId,
+      internalId: s.id || null,
+      tvdbId: s.tvdbId,
+      title: s.title,
+      year: s.year,
+      overview: s.overview ? s.overview.substring(0, 200) : '',
+      poster: s.images?.find(i => i.coverType === 'poster')?.remoteUrl || null,
+      status: s.status || (s.id ? 'inLibrary' : 'notInLibrary'),
+      inLibrary: !!s.id,
+      seasonCount: s.seasonCount || s.statistics?.seasonCount || null,
+    }));
+  }
+
   return {
     testConnection,
     getSeries,
@@ -191,6 +210,7 @@ export function createSonarrClient({ host, port, apiKey }) {
     setEpisodesUnmonitored,
     getQualityProfiles,
     getQualityProfile,
+    searchSeries,
     request,
     requestRaw,
   };
