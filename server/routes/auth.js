@@ -320,13 +320,24 @@ router.post('/passkey/delete-request', async (req, res) => {
 
 // ── Google OAuth (Updated with notifications) ──
 
+/**
+ * Build the Google OAuth redirect URI.
+ * Google strictly requires HTTPS for non-localhost domains.
+ */
+function getGoogleRedirectUri(req) {
+  const host = req.get('host');
+  const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+  const protocol = isLocal ? req.protocol : 'https';
+  return `${protocol}://${host}/api/auth/google/callback`;
+}
+
 router.get('/google/url', (req, res) => {
   const clientId = getSetting('google_client_id');
   if (!clientId) {
     return res.status(400).json({ error: 'Google Client ID not configured' });
   }
 
-  const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+  const redirectUri = getGoogleRedirectUri(req);
   const client = new OAuth2Client(clientId, '', redirectUri);
 
   const url = client.generateAuthUrl({
@@ -347,7 +358,7 @@ router.get('/google/callback', async (req, res) => {
     const encryptedSecret = getSetting('google_client_secret');
     const clientSecret = encryptedSecret ? decrypt(encryptedSecret) : '';
 
-    const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+    const redirectUri = getGoogleRedirectUri(req);
     const client = new OAuth2Client(clientId, clientSecret, redirectUri);
 
     const { tokens } = await client.getToken(code);

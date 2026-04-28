@@ -14,7 +14,7 @@ import { startHealthMonitor } from './monitors/healthCheck.js';
 
 const app = express();
 
-// ── Security & Middleware ──
+app.set('trust proxy', 1);
 app.use(helmet({
   contentSecurityPolicy: false, // Allow inline scripts for SPA
   crossOriginEmbedderPolicy: false,
