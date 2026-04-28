@@ -899,37 +899,39 @@ async function saveSettings(successMessage) {
     // Convert days back to seconds
     const days = parseFloat(document.getElementById('min_seeding_days').value) || 3;
 
-    const settings = {
-      deluge_host: document.getElementById('deluge_host')?.value || '',
-      deluge_port: document.getElementById('deluge_port')?.value || '',
-      deluge_password: document.getElementById('deluge_password')?.value || '',
-      radarr_host: document.getElementById('radarr_host')?.value || '',
-      radarr_port: document.getElementById('radarr_port')?.value || '',
-      radarr_api_key: document.getElementById('radarr_api_key')?.value || '',
-      sonarr_host: document.getElementById('sonarr_host')?.value || '',
-      sonarr_port: document.getElementById('sonarr_port')?.value || '',
-      sonarr_api_key: document.getElementById('sonarr_api_key')?.value || '',
-      min_seeding_time: Math.round(days * 86400).toString(),
-      min_ratio: document.getElementById('min_ratio')?.value || '1.1',
-      log_retention_days: document.getElementById('log_retention_days')?.value || '30',
-      // Email notifications
-      notify_email_enabled: document.getElementById('notify_email_enabled')?.checked ? '1' : '0',
-      notify_email_host: document.getElementById('notify_email_host')?.value || '',
-      notify_email_port: document.getElementById('notify_email_port')?.value || '',
-      notify_email_username: document.getElementById('notify_email_username')?.value || '',
-      notify_email_password: document.getElementById('notify_email_password')?.value || '',
-      notify_email_from: document.getElementById('notify_email_from')?.value || '',
-      notify_email_to: document.getElementById('notify_email_to')?.value || '',
-      // Telegram notifications
-      notify_telegram_enabled: document.getElementById('notify_telegram_enabled')?.checked ? '1' : '0',
-      notify_telegram_bot_token: document.getElementById('notify_telegram_bot_token')?.value || '',
-      notify_telegram_chat_id: document.getElementById('notify_telegram_chat_id')?.value || '',
-      // Google OAuth
-      google_auth_enabled: document.getElementById('google_auth_enabled')?.checked ? '1' : '0',
-      google_client_id: document.getElementById('google_client_id')?.value || '',
-      google_client_secret: document.getElementById('google_client_secret')?.value || '',
-      base_url: document.getElementById('base_url')?.value || '',
-    };
+    const settings = {};
+    
+    const fields = [
+      'deluge_host', 'deluge_port', 'deluge_password',
+      'radarr_host', 'radarr_port', 'radarr_api_key',
+      'sonarr_host', 'sonarr_port', 'sonarr_api_key',
+      'min_ratio', 'log_retention_days',
+      'notify_email_host', 'notify_email_port', 'notify_email_username',
+      'notify_email_password', 'notify_email_from', 'notify_email_to',
+      'notify_telegram_bot_token', 'notify_telegram_chat_id',
+      'google_client_id', 'google_client_secret', 'base_url'
+    ];
+
+    fields.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) settings[id] = el.value;
+    });
+
+    // Handle checkboxes
+    const checkboxes = [
+      'notify_email_enabled', 'notify_telegram_enabled', 'google_auth_enabled'
+    ];
+    checkboxes.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) settings[id] = el.checked ? '1' : '0';
+    });
+
+    // Handle special conversions
+    const seedingDaysEl = document.getElementById('min_seeding_days');
+    if (seedingDaysEl) {
+      const days = parseFloat(seedingDaysEl.value) || 3;
+      settings.min_seeding_time = Math.round(days * 86400).toString();
+    }
 
     await api.put('/settings', settings);
     if (successMessage) {
