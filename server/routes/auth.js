@@ -325,17 +325,31 @@ router.post('/passkey/delete-request', async (req, res) => {
  * Google strictly requires HTTPS for non-localhost domains.
  */
 function getGoogleRedirectUri(req) {
+  // 1. Priority: Manual override setting
   const baseUrl = getSetting('base_url');
-  if (baseUrl) {
-    // Remove trailing slash if present
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+  if (baseUrl && baseUrl.trim() !== '') {
+    const cleanBaseUrl = baseUrl.trim().replace(/\/$/, '');
+    console.log('[AUTH] Using base_url setting:', cleanBaseUrl);
     return `${cleanBaseUrl}/api/auth/google/callback`;
   }
   
+  // 2. Fallback: Request headers (honoring trust proxy)
   const host = req.get('host');
-  const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const finalHost = forwardedHost || host;
+  
+  const isLocal = finalHost.includes('localhost') || finalHost.includes('127.0.0.1');
   const protocol = isLocal ? req.protocol : 'https';
-  return `${protocol}://${host}/api/auth/google/callback`;
+  
+  console.log('[AUTH] Fallback host detection:', { 
+    host, 
+    forwardedHost, 
+    finalHost, 
+    protocol,
+    baseUrlSetting: baseUrl 
+  });
+  
+  return `${protocol}://${finalHost}/api/auth/google/callback`;
 }
 
 router.get('/google/url', (req, res) => {
