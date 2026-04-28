@@ -21,8 +21,9 @@ import { meetsQualityCutoff, getQualityName } from './quality.js';
  * @param {Function} log - Logging callback: (level, category, message, metadata)
  * @returns {Object} - Summary of actions taken
  */
-export async function executePhase1(clients, options = {}, log) {
+export async function executePhase1(clients, settings, options = {}, log) {
   const { deluge, radarr, sonarr } = clients;
+  const { minSeedingTime = 259200, minRatio = 1.1 } = settings || {};
   const { dryRun = false, existingMetadata = {} } = options;
 
   const summary = {
@@ -37,21 +38,25 @@ export async function executePhase1(clients, options = {}, log) {
 
   log('info', 'engine', 'Phase 1: Starting Verification & Monitoring');
 
-  // 1. Fetch torrents labeled 'media', 'ignore', or 'fordeletion'
+  // 1. Fetch all torrents from Deluge
   let torrents = [];
   try {
     await deluge.connect();
-    const mediaTorrents = await deluge.getTorrentsByLabel('media');
-    const ignoreTorrents = await deluge.getTorrentsByLabel('ignore');
-    const deletionTorrents = await deluge.getTorrentsByLabel('fordeletion');
+    const allTorrents = await deluge.getAllTorrents();
     
-    // Add a marker to distinguish them
-    mediaTorrents.forEach(t => t._target = 'process');
-    ignoreTorrents.forEach(t => t._target = 'metadata_only');
-    deletionTorrents.forEach(t => t._target = 'metadata_only');
+    // Categorize torrents for processing
+    // - 'media' or other labels: target for processing/relabeling
+    // - 'ignore' or 'fordeletion': only gather metadata
+    torrents = allTorrents.map(t => {
+      if (t.label === 'ignore' || t.label === 'fordeletion') {
+        t._target = 'metadata_only';
+      } else {
+        t._target = 'process';
+      }
+      return t;
+    });
     
-    torrents = [...mediaTorrents, ...ignoreTorrents, ...deletionTorrents];
-    log('info', 'deluge', `Found ${mediaTorrents.length} 'media', ${ignoreTorrents.length} 'ignore', and ${deletionTorrents.length} 'fordeletion' torrent(s)`);
+    log('info', 'deluge', `Fetched ${allTorrents.length} torrent(s) from Deluge`);
   } catch (err) {
     log('error', 'deluge', `Failed to fetch torrents: ${err.message}`);
     summary.errors++;
@@ -93,6 +98,25 @@ export async function executePhase1(clients, options = {}, log) {
       if (cached && cached.manager) {
         manager = cached.manager;
         log('info', 'engine', `Using cached manager "${manager}" for torrent "${torrent.name}"`);
+        
+        if (cached.metadata && cached.metadata.manualMatchId) {
+          log('info', 'engine', `Using manual match ID ${cached.metadata.manualMatchId} for "${torrent.name}"`);
+          if (manager === 'radarr') {
+            torrent._match = { source: 'manual', movieId: cached.metadata.manualMatchId };
+          } else if (manager === 'sonarr') {
+            try {
+              const episodes = await sonarr.getEpisodes(cached.metadata.manualMatchId);
+              const episodesWithFiles = episodes.filter(e => e.hasFile);
+              torrent._match = { 
+                source: 'manual', 
+                seriesId: cached.metadata.manualMatchId, 
+                episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' })) 
+              };
+            } catch (err) {
+              log('error', 'sonarr', `Failed to fetch episodes for manual match series ${cached.metadata.manualMatchId}: ${err.message}`);
+            }
+          }
+        }
       }
 
       // 2b. Try matching (if not cached or cache invalid)
@@ -108,7 +132,46 @@ export async function executePhase1(clients, options = {}, log) {
             torrent._match = sonarrMatch;
           }
         }
+
+        // Fallback: Parse filename to match if hash matching failed
+        if (!manager) {
+          try {
+             const parsedRadarr = await radarr.parseFilename(torrent.name);
+             if (parsedRadarr.movie) {
+               const movieFiles = await radarr.getMovieFiles(parsedRadarr.movie.id);
+               if (movieFiles && movieFiles.length > 0) {
+                  manager = 'radarr';
+                  torrent._match = { source: 'parse', movieId: parsedRadarr.movie.id };
+                  log('info', 'radarr', `Fallback matching via filename successful for "${torrent.name}"`);
+               }
+             }
+          } catch(e) {}
+          
+          if (!manager) {
+            try {
+               const parsedSonarr = await sonarr.parseFilename(torrent.name);
+               if (parsedSonarr.series) {
+                 const episodes = await sonarr.getEpisodes(parsedSonarr.series.id);
+                 const episodesWithFiles = episodes.filter(e => e.hasFile);
+                 if (episodesWithFiles.length > 0) {
+                   manager = 'sonarr';
+                   torrent._match = { 
+                     source: 'parse', 
+                     seriesId: parsedSonarr.series.id, 
+                     episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' })) 
+                   };
+                   log('info', 'sonarr', `Fallback matching via filename successful for "${torrent.name}"`);
+                 }
+               }
+            } catch(e) {}
+          }
+        }
       }
+
+      // Check limits early
+      const seedingTimeMet = torrent.seedingTime >= minSeedingTime;
+      const ratioMet = torrent.ratio >= minRatio;
+      const limitMet = seedingTimeMet || ratioMet;
 
       // ── RADARR BLOCK ──
       if (manager === 'radarr') {
@@ -148,30 +211,31 @@ export async function executePhase1(clients, options = {}, log) {
             summary.unmonitored++;
             log('info', 'radarr', `${dryRun ? '[DRY RUN] Would ensure unmonitored' : 'Ensuring unmonitored'} movie: ${movie.title}`);
 
-            // Only relabel to 'ignore' if quality cutoff is met
-            if (qualityMet) {
+            // Only relabel to 'ignore' if quality cutoff is met OR limit is met
+            if (qualityMet || limitMet) {
               summary.matched++;
               
               if (torrent._target === 'process') {
                 if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
                 summary.relabeled++;
-                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore (${qualityMet ? 'Quality met' : 'Limit reached'})`);
               } else {
                 log('info', 'radarr', `Metadata gathered for movie: ${movie.title}`);
               }
             } else {
-              log('info', 'radarr', `Quality cutoff NOT met for "${movie.title}". Keeping in media label for further seeding.`);
+              log('info', 'radarr', `Quality cutoff NOT met and limit NOT reached for "${movie.title}". Keeping in media label for further seeding.`);
             }
 
             summary.details.push({
               hash: torrent.hash,
               name: torrent.name,
-              action: (torrent._target === 'process' && qualityMet) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
+              action: (torrent._target === 'process' && (qualityMet || limitMet)) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
               service: 'radarr',
               manager: 'radarr',
               title: movie.title,
               quality: fileQualityName,
               qualityMet,
+              limitMet,
               metadata: buildRadarrMetadata(movie),
             });
             continue;
@@ -243,30 +307,31 @@ export async function executePhase1(clients, options = {}, log) {
             summary.unmonitored++;
             log('info', 'sonarr', `${dryRun ? '[DRY RUN] Would ensure unmonitored' : 'Ensuring unmonitored'} ${episodeIds.length} episode(s) of "${series.title}"`);
 
-            // Only relabel to 'ignore' if ALL episodes in the torrent meet quality cutoff
-            if (allQualityMet && profile) {
+            // Only relabel to 'ignore' if ALL episodes in the torrent meet quality cutoff OR limit is met
+            if ((allQualityMet && profile) || limitMet) {
               summary.matched++;
               
               if (torrent._target === 'process') {
                 if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
                 summary.relabeled++;
-                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore`);
+                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore (${(allQualityMet && profile) ? 'Quality met' : 'Limit reached'})`);
               } else {
                 log('info', 'sonarr', `Metadata gathered for series: ${series.title}`);
               }
             } else if (profile) {
-               log('info', 'sonarr', `Quality cutoff NOT met for some episodes of "${series.title}". Keeping in media label.`);
+               log('info', 'sonarr', `Quality cutoff NOT met for some episodes and limit NOT reached for "${series.title}". Keeping in media label.`);
             }
 
             summary.details.push({
               hash: torrent.hash,
               name: torrent.name,
-              action: (torrent._target === 'process' && allQualityMet) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
+              action: (torrent._target === 'process' && ((allQualityMet && profile) || limitMet)) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
               service: 'sonarr',
               manager: 'sonarr',
               title: series.title,
               episodes: episodeIds.length,
               allQualityMet,
+              limitMet,
               metadata: buildSonarrMetadata(series),
             });
             continue;

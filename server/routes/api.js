@@ -4,6 +4,7 @@ import settingsRouter from './settings.js';
 import schedulerRouter from './scheduler.js';
 import runsRouter from './runs.js';
 import logsRouter from './logs.js';
+import { torrentsRouter } from './torrents.js';
 
 const router = Router();
 
@@ -12,6 +13,7 @@ router.use('/settings', settingsRouter);
 router.use('/schedules', schedulerRouter);
 router.use('/', runsRouter);        // /api/run, /api/runs
 router.use('/logs', logsRouter);
+router.use('/torrents', torrentsRouter);
 
 // Auth verification endpoint (auth required)
 router.get('/verify', (req, res) => {

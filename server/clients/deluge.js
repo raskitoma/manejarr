@@ -66,13 +66,18 @@ export function createDelugeClient({ host, port, password }) {
     // Ensure we're connected to a daemon
     const connected = await rpc('web.connected');
     if (!connected) {
-      // Try to connect to the first available daemon
       const hosts = await rpc('web.get_hosts');
       if (hosts && hosts.length > 0) {
         await rpc('web.connect', [hosts[0][0]]);
       } else {
         throw new Error('No Deluge daemon available to connect to.');
       }
+    }
+
+    // Check if Label plugin is enabled
+    const plugins = await rpc('core.get_enabled_plugins');
+    if (!plugins.includes('Label')) {
+      console.warn('[DELUGE] Label plugin is not enabled. Labels will not work.');
     }
 
     return true;
@@ -169,6 +174,20 @@ export function createDelugeClient({ host, port, password }) {
   }
 
   /**
+   * Add a new label to Deluge.
+   */
+  async function addLabel(label) {
+    try {
+      await rpc('label.add', [label]);
+    } catch (err) {
+      // Ignore if label already exists
+      if (!err.message.includes('already exists')) {
+        throw err;
+      }
+    }
+  }
+
+  /**
    * Pause a torrent (stop seeding).
    */
   async function pauseTorrent(hash) {
@@ -189,6 +208,7 @@ export function createDelugeClient({ host, port, password }) {
     getAllTorrents,
     getTorrentDetails,
     setTorrentLabel,
+    addLabel,
     pauseTorrent,
     getLabels,
     rpc,

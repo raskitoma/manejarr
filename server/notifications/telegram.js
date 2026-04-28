@@ -96,7 +96,7 @@ export function formatTelegramMessage(summary) {
 
   let msg = `🦜 *Manejarr Run Report*\n`;
   msg += `${runLabel}\n`;
-  msg += `📅 ${new Date().toLocaleString()}\n\n`;
+  msg += `📅 ${new Date().toLocaleString()} (Server TZ: ${Intl.DateTimeFormat().resolvedOptions().timeZone})\n\n`;
 
   if (summary.phase1) {
     msg += `*Phase 1 — Verification*\n`;
@@ -118,6 +118,54 @@ export function formatTelegramMessage(summary) {
   if (summary.totals) {
     const status = summary.totals.errors > 0 ? '⚠️' : '✅';
     msg += `${status} *Total:* \`${summary.totals.processed}\` processed, \`${summary.totals.actions}\` actions, \`${summary.totals.errors}\` errors`;
+  }
+
+  // Collect moved torrents
+  const ignoreTorrents = [];
+  const forDeletionTorrents = [];
+  const unmatchedTorrents = [];
+
+  if (summary.phase1?.details) {
+    ignoreTorrents.push(...summary.phase1.details
+      .filter(d => d.action === 'processed' || d.action === 'would_process')
+      .map(d => d.name));
+      
+    unmatchedTorrents.push(...summary.phase1.details
+      .filter(d => d.action === 'unmatched')
+      .map(d => d.name));
+  }
+  if (summary.phase2?.details) {
+    forDeletionTorrents.push(...summary.phase2.details
+      .filter(d => d.action === 'transitioned' || d.action === 'would_transition')
+      .map(d => d.name));
+  }
+
+  if (ignoreTorrents.length > 0 || forDeletionTorrents.length > 0 || unmatchedTorrents.length > 0) {
+    let listStr = `\n\n*Torrents Breakdown:*\n`;
+    let listItems = '';
+    
+    if (ignoreTorrents.length > 0) {
+      listItems += `\n_Moved to 'ignore' (${ignoreTorrents.length}):_\n` + ignoreTorrents.map(t => `• \`${t}\``).join('\n') + '\n';
+    }
+    if (forDeletionTorrents.length > 0) {
+      listItems += `\n_Moved to 'fordeletion' (${forDeletionTorrents.length}):_\n` + forDeletionTorrents.map(t => `• \`${t}\``).join('\n') + '\n';
+    }
+    if (unmatchedTorrents.length > 0) {
+      listItems += `\n_Unmatched (${unmatchedTorrents.length}):_\n` + unmatchedTorrents.map(t => `• \`${t}\``).join('\n') + '\n';
+    }
+    
+    // Check length for Telegram (limit is 4096, using 4000 as safe threshold)
+    if (msg.length + listStr.length + listItems.length > 4000) {
+      const maxLen = 4000 - msg.length - listStr.length - 100;
+      if (maxLen > 0) {
+        msg += listStr + listItems.substring(0, maxLen) + '\n_... (list truncated)_';
+      } else {
+        const total = ignoreTorrents.length + forDeletionTorrents.length + unmatchedTorrents.length;
+        msg += `\n\n*Torrents Breakdown (${total})* _(list too long for Telegram)_`;
+      }
+    } else {
+      msg += listStr + listItems;
+    }
   }
 
   return msg;

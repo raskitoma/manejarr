@@ -167,7 +167,7 @@ export function formatEmailBody(summary) {
 
   let body = `═══ Manejarr Run Report ═══\n`;
   body += `Type: ${runLabel}\n`;
-  body += `Time: ${new Date().toISOString()}\n\n`;
+  body += `Time: ${new Date().toLocaleString()} (Server TZ: ${Intl.DateTimeFormat().resolvedOptions().timeZone})\n\n`;
 
   if (summary.phase1) {
     body += `── Phase 1: Verification & Monitoring ──\n`;
@@ -191,6 +191,42 @@ export function formatEmailBody(summary) {
     body += `  Total Processed: ${summary.totals.processed}\n`;
     body += `  Total Actions: ${summary.totals.actions}\n`;
     body += `  Total Errors: ${summary.totals.errors}\n`;
+  }
+
+  // Collect moved torrents
+  const ignoreTorrents = [];
+  const forDeletionTorrents = [];
+  const unmatchedTorrents = [];
+
+  if (summary.phase1?.details) {
+    ignoreTorrents.push(...summary.phase1.details
+      .filter(d => d.action === 'processed' || d.action === 'would_process')
+      .map(d => d.name));
+      
+    unmatchedTorrents.push(...summary.phase1.details
+      .filter(d => d.action === 'unmatched')
+      .map(d => d.name));
+  }
+  if (summary.phase2?.details) {
+    forDeletionTorrents.push(...summary.phase2.details
+      .filter(d => d.action === 'transitioned' || d.action === 'would_transition')
+      .map(d => d.name));
+  }
+
+  if (ignoreTorrents.length > 0 || forDeletionTorrents.length > 0 || unmatchedTorrents.length > 0) {
+    body += `\nTorrents Breakdown:\n`;
+    if (ignoreTorrents.length > 0) {
+      body += `\n  Moved to 'ignore' (${ignoreTorrents.length}):\n`;
+      body += ignoreTorrents.map(t => `    - ${t}`).join('\n') + '\n';
+    }
+    if (forDeletionTorrents.length > 0) {
+      body += `\n  Moved to 'fordeletion' (${forDeletionTorrents.length}):\n`;
+      body += forDeletionTorrents.map(t => `    - ${t}`).join('\n') + '\n';
+    }
+    if (unmatchedTorrents.length > 0) {
+      body += `\n  Unmatched (${unmatchedTorrents.length}):\n`;
+      body += unmatchedTorrents.map(t => `    - ${t}`).join('\n') + '\n';
+    }
   }
 
   body += `\n— Manejarr`;

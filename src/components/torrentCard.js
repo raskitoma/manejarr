@@ -31,7 +31,9 @@ export function renderTorrentRow(torrent) {
       <td>
         ${torrent.managerUrl 
           ? `<a href="${torrent.managerUrl}" target="_blank" class="badge-link"><span class="badge ${managerClass}">${torrent.manager}</span></a>`
-          : `<span class="badge ${managerClass}">${torrent.manager || '—'}</span>`
+          : (torrent.manager 
+            ? `<span class="badge ${managerClass}">${torrent.manager}</span>` 
+            : `<button class="btn btn-sm btn-secondary link-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}">🔗 Link</button>`)
         }
       </td>
       <td><span class="badge ${labelClass}">${torrent.label || 'none'}</span></td>

@@ -22,7 +22,7 @@ const alertState = {
 
 // Current connection status (readable by dashboard)
 let currentStatus = {
-  deluge: { connected: false, error: null, version: null, lastCheck: null },
+  deluge: { connected: false, error: null, version: null, lastCheck: null, labels: [] },
   radarr: { connected: false, error: null, version: null, lastCheck: null },
   sonarr: { connected: false, error: null, version: null, lastCheck: null },
 };
@@ -55,7 +55,8 @@ export async function runHealthCheck() {
         password: decrypt(password),
       });
       const info = await client.testConnection();
-      currentStatus.deluge = { connected: true, version: info.version, error: null, lastCheck: now };
+      const labels = await client.getLabels();
+      currentStatus.deluge = { connected: true, version: info.version, error: null, lastCheck: now, labels };
 
       if (alertState.deluge.down) {
         recovered.push('Deluge');

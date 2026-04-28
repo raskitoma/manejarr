@@ -210,6 +210,18 @@ function initDashboardEvents() {
     });
   }
 
+  // Torrent Actions (Link)
+  if (tableBody) {
+    tableBody.addEventListener('click', (e) => {
+      const linkBtn = e.target.closest('.link-torrent-btn');
+      if (linkBtn) {
+        const hash = linkBtn.dataset.hash;
+        const name = linkBtn.dataset.name;
+        openLinkModal(hash, name);
+      }
+    });
+  }
+
   // Render run buttons
   renderRunButtons('run-buttons', (status) => {
     if (!status.running) loadDashboardData();
@@ -380,4 +392,70 @@ export function cleanupDashboard() {
     clearInterval(refreshInterval);
     refreshInterval = null;
   }
+}
+
+function openLinkModal(hash, name) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  
+  const modal = document.createElement('div');
+  modal.className = 'modal-content';
+  modal.style.maxWidth = '500px';
+  
+  modal.innerHTML = `
+    <h3>Link Torrent to Manager</h3>
+    <p class="text-muted" style="margin-bottom: var(--space-md); word-break: break-all;"><strong>${name}</strong></p>
+    
+    <div class="form-group">
+      <label class="form-label">Manager</label>
+      <select id="link-manager" class="form-input">
+        <option value="radarr">Radarr (Movie)</option>
+        <option value="sonarr">Sonarr (Series)</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">Media ID</label>
+      <input type="number" id="link-id" class="form-input" placeholder="e.g. 123" required>
+      <small class="text-muted" style="display: block; margin-top: 5px;">Enter the internal ID from Radarr/Sonarr (found in the URL of the media item).</small>
+    </div>
+    
+    <div style="display: flex; gap: var(--space-md); margin-top: var(--space-xl);">
+      <button class="btn btn-primary flex-1" id="link-submit-btn">Link Torrent</button>
+      <button class="btn btn-secondary flex-1" id="link-cancel-btn">Cancel</button>
+    </div>
+  `;
+  
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  
+  document.getElementById('link-cancel-btn').onclick = () => document.body.removeChild(overlay);
+  
+  document.getElementById('link-submit-btn').onclick = async () => {
+    const manager = document.getElementById('link-manager').value;
+    const id = document.getElementById('link-id').value;
+    
+    if (!id) {
+      showToast('Please enter a Media ID', 'error');
+      return;
+    }
+    
+    try {
+      const btn = document.getElementById('link-submit-btn');
+      btn.disabled = true;
+      btn.innerText = 'Linking...';
+      
+      await api.post(`/torrents/${hash}/match`, { manager, id });
+      showToast('Torrent manually linked successfully!', 'success');
+      document.body.removeChild(overlay);
+      
+      // Reload dashboard data to show the new badge
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.message, 'error');
+      document.getElementById('link-submit-btn').disabled = false;
+      document.getElementById('link-submit-btn').innerText = 'Link Torrent';
+    }
+  };
 }

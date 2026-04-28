@@ -83,7 +83,36 @@ function startStatusPolling(onStatusChange) {
             const lastRun = logData.rows[0];
             if (lastRun.status === 'success') {
               const s = lastRun.summary?.totals || {};
+              const summaryObj = lastRun.summary || {};
               showToast(`Run complete. Processed: ${s.processed || 0} | Actions: ${s.actions || 0} | Errors: ${s.errors || 0}`, 'success');
+
+              // Extract moved torrents
+              const ignoreTorrents = [];
+              const forDeletionTorrents = [];
+              const unmatchedTorrents = [];
+
+              if (summaryObj.phase1?.details) {
+                ignoreTorrents.push(...summaryObj.phase1.details
+                  .filter(d => d.action === 'processed' || d.action === 'would_process')
+                  .map(d => d.name));
+                  
+                unmatchedTorrents.push(...summaryObj.phase1.details
+                  .filter(d => d.action === 'unmatched')
+                  .map(d => d.name));
+              }
+              if (summaryObj.phase2?.details) {
+                forDeletionTorrents.push(...summaryObj.phase2.details
+                  .filter(d => d.action === 'transitioned' || d.action === 'would_transition')
+                  .map(d => d.name));
+              }
+
+              if (ignoreTorrents.length > 0 || forDeletionTorrents.length > 0 || unmatchedTorrents.length > 0) {
+                showMovedTorrentsPopup(
+                  { ignore: ignoreTorrents, fordeletion: forDeletionTorrents, unmatched: unmatchedTorrents }, 
+                  lastRun.finished_at,
+                  lastRun.run_type
+                );
+              }
             } else {
               showToast(`Run failed: ${lastRun.error || 'Check logs for details'}`, 'error');
             }
@@ -153,4 +182,114 @@ export function setRunButtonsEnabled(enabled, runStatus = { running: false }) {
     runBtn.innerHTML = `<span>🚀</span> ${t('run_now')}`;
     dryBtn.innerHTML = `<span>🔍</span> ${t('dry_run')}`;
   }
+}
+
+function showMovedTorrentsPopup(torrents, finishedAt, runType) {
+  const isDryRun = runType === 'dry-run';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  
+  const modal = document.createElement('div');
+  modal.className = 'modal-content';
+  modal.style.maxWidth = '600px';
+  modal.style.maxHeight = '80vh';
+  modal.style.overflowY = 'auto';
+  
+  const title = document.createElement('h3');
+  title.innerText = isDryRun ? 'Dry Run Results (Simulation)' : 'Relabeled Torrents';
+  title.style.marginBottom = '5px';
+  if (isDryRun) title.style.color = 'var(--status-info)';
+  modal.appendChild(title);
+  
+  const timeSub = document.createElement('div');
+  timeSub.style.fontSize = '0.85rem';
+  timeSub.style.color = 'var(--text-muted)';
+  timeSub.style.marginBottom = '15px';
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  timeSub.innerText = `Executed at: ${finishedAt ? new Date(finishedAt + 'Z').toLocaleString() : new Date().toLocaleString()} (Browser TZ: ${tz})`;
+  modal.appendChild(timeSub);
+  
+  const content = document.createElement('div');
+  content.style.maxHeight = '350px';
+  content.style.overflowY = 'auto';
+  content.style.padding = '10px 15px';
+  content.style.background = 'var(--bg-glass)';
+  content.style.borderRadius = 'var(--radius-md)';
+  content.style.border = '1px solid var(--border-color)';
+
+  if (torrents.ignore && torrents.ignore.length > 0) {
+    const h4 = document.createElement('h4');
+    h4.innerText = `${isDryRun ? 'Would move' : 'Moved'} to 'ignore' (${torrents.ignore.length})`;
+    h4.style.margin = '0 0 10px 0';
+    h4.style.color = 'var(--label-ignore)';
+    content.appendChild(h4);
+    
+    const ul = document.createElement('ul');
+    ul.style.textAlign = 'left';
+    ul.style.paddingLeft = '20px';
+    ul.style.marginBottom = '20px';
+    torrents.ignore.forEach(t => {
+      const li = document.createElement('li');
+      li.innerText = t;
+      li.style.wordBreak = 'break-all';
+      li.style.marginBottom = '4px';
+      ul.appendChild(li);
+    });
+    content.appendChild(ul);
+  }
+
+  if (torrents.fordeletion && torrents.fordeletion.length > 0) {
+    const h4 = document.createElement('h4');
+    h4.innerText = `${isDryRun ? 'Would move' : 'Moved'} to 'fordeletion' (${torrents.fordeletion.length})`;
+    h4.style.margin = '0 0 10px 0';
+    h4.style.color = 'var(--label-fordeletion)';
+    content.appendChild(h4);
+    
+    const ul = document.createElement('ul');
+    ul.style.textAlign = 'left';
+    ul.style.paddingLeft = '20px';
+    ul.style.marginBottom = '10px';
+    torrents.fordeletion.forEach(t => {
+      const li = document.createElement('li');
+      li.innerText = t;
+      li.style.wordBreak = 'break-all';
+      li.style.marginBottom = '4px';
+      ul.appendChild(li);
+    });
+    content.appendChild(ul);
+  }
+
+  if (torrents.unmatched && torrents.unmatched.length > 0) {
+    const h4 = document.createElement('h4');
+    h4.innerText = `Unmatched (${torrents.unmatched.length})`;
+    h4.style.margin = '0 0 10px 0';
+    h4.style.color = 'var(--text-muted)';
+    content.appendChild(h4);
+    
+    const ul = document.createElement('ul');
+    ul.style.textAlign = 'left';
+    ul.style.paddingLeft = '20px';
+    ul.style.marginBottom = '10px';
+    torrents.unmatched.forEach(t => {
+      const li = document.createElement('li');
+      li.innerText = t;
+      li.style.wordBreak = 'break-all';
+      li.style.marginBottom = '4px';
+      ul.appendChild(li);
+    });
+    content.appendChild(ul);
+  }
+
+  modal.appendChild(content);
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-primary';
+  closeBtn.innerText = 'Close';
+  closeBtn.style.marginTop = '20px';
+  closeBtn.onclick = () => document.body.removeChild(overlay);
+  
+  modal.appendChild(closeBtn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }

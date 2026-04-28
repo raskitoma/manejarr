@@ -129,6 +129,18 @@ export async function runFull(options = {}) {
     // Build clients
     const clients = buildClients();
 
+    // Ensure labels exist in Deluge
+    if (!dryRun) {
+      try {
+        await clients.deluge.connect();
+        await clients.deluge.addLabel('media');
+        await clients.deluge.addLabel('ignore');
+        await clients.deluge.addLabel('fordeletion');
+      } catch (err) {
+        log('warn', 'deluge', `Failed to ensure labels exist: ${err.message}`);
+      }
+    }
+
     // Get retention settings
     const minSeedingTime = parseInt(getSetting('min_seeding_time'), 10) || 259200; // 3 days
     const minRatio = parseFloat(getSetting('min_ratio')) || 1.1;
@@ -138,7 +150,7 @@ export async function runFull(options = {}) {
 
     // ── Phase 1: Verification & Monitoring ──
     log('info', 'engine', '═══ Phase 1: Verification & Monitoring ═══');
-    const phase1Result = await executePhase1(clients, { dryRun, existingMetadata }, log);
+    const phase1Result = await executePhase1(clients, { minSeedingTime, minRatio }, { dryRun, existingMetadata }, log);
 
     // ── Phase 2: Retention & Cleanup ──
     log('info', 'engine', '═══ Phase 2: Retention & Cleanup ═══');
