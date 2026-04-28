@@ -57,6 +57,26 @@ function getRpId(req) {
 }
 
 /**
+ * Get the list of allowed origins for WebAuthn.
+ * Prioritizes the base_url setting if available.
+ */
+function getExpectedOrigins(req) {
+  const origins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  
+  const baseUrl = getSetting('base_url');
+  if (baseUrl && baseUrl.trim() !== '') {
+    const cleanBaseUrl = baseUrl.trim().replace(/\/$/, '');
+    if (!origins.includes(cleanBaseUrl)) origins.push(cleanBaseUrl);
+  }
+  
+  // Fallback to current request origin
+  const reqOrigin = `${req.protocol}://${req.get('host')}`;
+  if (!origins.includes(reqOrigin)) origins.push(reqOrigin);
+  
+  return origins;
+}
+
+/**
  * Public endpoint to get auth configuration.
  */
 router.get('/config', (req, res) => {
@@ -103,8 +123,7 @@ router.post('/passkey/register-verify', async (req, res) => {
   const expectedChallenge = challenges.get(`reg_${config.adminUsername}`);
 
   try {
-    const origin = `${req.protocol}://${req.get('host')}`;
-    const expectedOrigin = [origin, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+    const expectedOrigin = getExpectedOrigins(req);
 
     console.log('[WEBAUTHN] Verifying registration for:', config.adminUsername);
     const verification = await verifyRegistrationResponse({
@@ -191,8 +210,7 @@ router.post('/passkey/login-verify', async (req, res) => {
   if (!passkey) return res.status(400).json({ error: 'Passkey not found' });
 
   try {
-    const origin = `${req.protocol}://${req.get('host')}`;
-    const expectedOrigin = [origin, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+    const expectedOrigin = getExpectedOrigins(req);
 
     console.log('[WEBAUTHN] Verifying login for:', config.adminUsername);
     const verification = await verifyAuthenticationResponse({

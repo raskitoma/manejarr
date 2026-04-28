@@ -255,6 +255,63 @@ async function showLoginModal() {
         }
       };
       window.addEventListener('message', handleMessage);
+
+      // Storage event listener (fallback for some browsers)
+      const handleStorage = async (event) => {
+        if (event.key === 'manejarr_google_auth' && event.newValue) {
+          console.log('[AUTH] Detected auth data in localStorage');
+          localStorage.removeItem('manejarr_google_auth');
+          try {
+            const { type, token } = JSON.parse(event.newValue);
+            if (type === 'google-auth-success') {
+              const { setToken } = await import('./utils/api.js');
+              setToken(token);
+              onSuccess();
+              cleanup();
+            }
+          } catch (e) {
+            console.error('[AUTH] Storage bridge error:', e);
+          }
+        }
+      };
+      window.addEventListener('storage', handleStorage);
+
+      const cleanup = () => {
+        clearInterval(checkClosed);
+        window.removeEventListener('message', handleMessage);
+        window.removeEventListener('storage', handleStorage);
+        if (!popup.closed) popup.close();
+      };
+
+      // Check if popup closed or if localStorage has the data (fallback for window.opener issues)
+      const checkClosed = setInterval(async () => {
+        // 1. Check for localStorage bridge data
+        const authDataRaw = localStorage.getItem('manejarr_google_auth');
+        if (authDataRaw) {
+          localStorage.removeItem('manejarr_google_auth');
+          try {
+            const { type, token, googleUserId, email } = JSON.parse(authDataRaw);
+            if (type === 'google-auth-success') {
+              const { setToken } = await import('./utils/api.js');
+              setToken(token);
+              onSuccess();
+              cleanup();
+            } else if (type === 'google-auth-link') {
+              updateModal('This Google account is not linked to an admin user.');
+              cleanup();
+            }
+            return;
+          } catch (e) {
+            console.error('[AUTH] Failed to parse auth data from storage:', e);
+          }
+        }
+
+        // 2. Check if popup was closed manually
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', handleMessage);
+        }
+      }, 1000);
     } catch (err) {
       showToast(err.message, 'error');
     }

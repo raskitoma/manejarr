@@ -553,7 +553,7 @@ async function linkGoogleAccount() {
       if (event.data.type === 'google-auth-link') {
         const { googleUserId, email } = event.data;
         completeLinking(googleUserId, email);
-        clearInterval(checkClosed);
+        cleanup();
       } else if (event.data.type === 'google-auth-success') {
         // This shouldn't happen during linking unless they were already linked
         showToast('Account already linked and authenticated', 'success');
@@ -562,6 +562,29 @@ async function linkGoogleAccount() {
     };
     
     window.addEventListener('message', handleMessage);
+    
+    // Storage event listener (fallback for some browsers)
+    const handleStorage = (event) => {
+      if (event.key === 'manejarr_google_link' && event.newValue) {
+        console.log('[AUTH] Detected link data in localStorage');
+        localStorage.removeItem('manejarr_google_link');
+        try {
+          const { googleUserId, email } = JSON.parse(event.newValue);
+          completeLinking(googleUserId, email);
+          cleanup();
+        } catch (e) {
+          console.error('[AUTH] Storage bridge error:', e);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    const cleanup = () => {
+      clearInterval(checkClosed);
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      if (!popup.closed) popup.close();
+    };
 
     // Check if popup closed or if localStorage has the data (fallback for window.opener issues)
     const checkClosed = setInterval(() => {
@@ -572,8 +595,7 @@ async function linkGoogleAccount() {
         try {
           const { googleUserId, email } = JSON.parse(linkDataRaw);
           completeLinking(googleUserId, email);
-          clearInterval(checkClosed);
-          if (!popup.closed) popup.close();
+          cleanup();
           return;
         } catch (e) {
           console.error('[AUTH] Failed to parse link data from storage:', e);
