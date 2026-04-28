@@ -14,6 +14,16 @@ let authHeader = '';
 export function setCredentials(username, password) {
   authHeader = 'Basic ' + btoa(`${username}:${password}`);
   localStorage.setItem('manejarr_auth', authHeader);
+  localStorage.setItem('manejarr_auth_type', 'basic');
+}
+
+/**
+ * Set the Bearer Token (JWT).
+ */
+export function setToken(token) {
+  authHeader = 'Bearer ' + token;
+  localStorage.setItem('manejarr_auth', authHeader);
+  localStorage.setItem('manejarr_auth_type', 'bearer');
 }
 
 /**
@@ -30,6 +40,7 @@ export function loadCredentials() {
 export function clearCredentials() {
   authHeader = '';
   localStorage.removeItem('manejarr_auth');
+  localStorage.removeItem('manejarr_auth_type');
 }
 
 /**

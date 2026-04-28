@@ -15,6 +15,7 @@ const router = Router();
 const SENSITIVE_KEYS = [
   'deluge_password', 'radarr_api_key', 'sonarr_api_key',
   'notify_email_password', 'notify_telegram_bot_token',
+  'google_client_secret',
 ];
 
 // All known setting keys
@@ -30,6 +31,7 @@ const SETTING_KEYS = [
   // Notification — Telegram
   'notify_telegram_enabled', 'notify_telegram_bot_token', 'notify_telegram_chat_id',
   'log_retention_days',
+  'google_auth_enabled', 'google_client_id', 'google_client_secret', 'google_user_id',
 ];
 
 /**

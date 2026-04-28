@@ -30,8 +30,8 @@ app.get('/api/health', (req, res) => {
 
 // ── Protected API routes ──
 app.use('/api', (req, res, next) => {
-  // Allow image proxy without authentication as <img> tags can't send headers
-  if (req.path === '/dashboard/proxy-image' && req.method === 'GET') {
+  // Allow image proxy and auth config without authentication
+  if ((req.path === '/dashboard/proxy-image' && req.method === 'GET') || req.path.startsWith('/auth/')) {
     return next();
   }
   basicAuth(req, res, next);

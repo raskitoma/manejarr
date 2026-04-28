@@ -238,9 +238,9 @@ export async function renderSettings() {
           </div>
         </div>
       </div>
-      
       <!-- Account Tab -->
       <div id="tab-account" class="tab-pane">
+
         <div class="service-section">
           <div class="service-header">
             <div class="service-title">
@@ -274,6 +274,25 @@ export async function renderSettings() {
             </div>
           </div>
         </div>
+
+        <!-- Google Account Linking -->
+        <div class="service-section mt-lg" id="google-account-section">
+          <div class="service-header">
+            <div class="service-title">
+              <div class="service-icon" style="background: rgba(66, 133, 244, 0.15); color: #4285f4;">G</div>
+              <span>Google Account</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="flex items-center justify-between">
+              <div>
+                <div id="google-link-status" class="form-label" style="margin-bottom: 4px;">Not linked</div>
+                <div id="google-link-email" class="text-secondary" style="font-size: 0.85rem;">Link your Google account to enable one-click sign-in.</div>
+              </div>
+              <button class="btn btn-secondary" id="link-google-btn">🔗 Link Account</button>
+            </div>
+          </div>
+        </div>
       </div>
       
       <!-- Extras Tab -->
@@ -296,8 +315,45 @@ export async function renderSettings() {
             <div id="compact-result" class="mt-md"></div>
           </div>
         </div>
-      </div>
 
+        <!-- Google OAuth Configuration -->
+        <div class="service-section mt-lg">
+          <div class="service-header">
+            <div class="service-title">
+              <div class="service-icon" style="background: rgba(66, 133, 244, 0.15); color: #4285f4;">G</div>
+              <span>Google Sign-in</span>
+            </div>
+            <div class="flex items-center gap-sm">
+              <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">Enable Google Sign-in</span>
+              <label class="toggle-switch" for="google_auth_enabled">
+                <input type="checkbox" id="google_auth_enabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="card">
+            <div class="form-group">
+              <label class="form-label" for="google_client_id">Client ID</label>
+              <input type="text" id="google_client_id" class="form-input form-input-mono" placeholder="your-client-id.apps.googleusercontent.com" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="google_client_secret">Client Secret</label>
+              <input type="password" id="google_client_secret" class="form-input form-input-mono" placeholder="GOCSPX-..." />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Callback URL</label>
+              <div class="flex gap-sm">
+                <input type="text" id="google_callback_url" class="form-input form-input-mono" readonly value="" />
+                <button class="btn btn-secondary" id="copy-callback-btn" title="Copy to clipboard">📋 Copy</button>
+              </div>
+              <span class="form-hint">Paste this into the "Authorized redirect URIs" in Google Cloud Console.</span>
+            </div>
+            <div class="flex justify-end mt-md">
+              <button class="btn btn-primary" id="save-google-btn">Save Google Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -343,6 +399,84 @@ export async function renderSettings() {
   document.getElementById('change-password-btn')?.addEventListener('click', changePassword);
   document.getElementById('new_password')?.addEventListener('input', updatePasswordStrength);
   document.getElementById('compact-db-btn')?.addEventListener('click', compactDatabaseUI);
+
+  // Google Sign-in Events
+  document.getElementById('save-google-btn')?.addEventListener('click', () => saveSettings('Google settings saved'));
+  document.getElementById('copy-callback-btn')?.addEventListener('click', copyCallbackUrl);
+  document.getElementById('link-google-btn')?.addEventListener('click', linkGoogleAccount);
+  document.getElementById('google_auth_enabled')?.addEventListener('change', () => {
+    updateGoogleAccountVisibility();
+    saveSettings('Google Sign-in status updated');
+  });
+}
+
+function copyCallbackUrl() {
+  const urlInput = document.getElementById('google_callback_url');
+  urlInput.select();
+  urlInput.setSelectionRange(0, 99999); // For mobile devices
+  navigator.clipboard.writeText(urlInput.value).then(() => {
+    showToast('Callback URL copied to clipboard', 'success');
+  }).catch(err => {
+    showToast('Failed to copy: ' + err.message, 'error');
+  });
+}
+
+async function linkGoogleAccount() {
+  const btn = document.getElementById('link-google-btn');
+  btn.disabled = true;
+  btn.textContent = 'Opening Google...';
+
+  try {
+    const { url } = await api.get('/auth/google/url');
+    
+    // Open popup
+    const width = 500;
+    const height = 600;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+    
+    const popup = window.open(url, 'google-auth', `width=${width},height=${height},top=${top},left=${left}`);
+    
+    // Listen for message from popup
+    const handleMessage = async (event) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === 'google-auth-link') {
+        const { googleUserId, email } = event.data;
+        
+        // Save the linked ID
+        try {
+          await api.put('/settings', { google_user_id: googleUserId });
+          showToast(`Linked to ${email}`, 'success');
+          loadSettings(); // Refresh UI
+        } catch (err) {
+          showToast('Failed to save link: ' + err.message, 'error');
+        }
+        
+        window.removeEventListener('message', handleMessage);
+      } else if (event.data.type === 'google-auth-success') {
+        // This shouldn't happen during linking unless they were already linked
+        showToast('Account already linked and authenticated', 'success');
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+
+    // Check if popup closed without message
+    const checkClosed = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(checkClosed);
+        btn.disabled = false;
+        btn.textContent = '🔗 Link Account';
+      }
+    }, 1000);
+
+  } catch (err) {
+    showToast('Failed to start Google Auth: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '🔗 Link Account';
+  }
 }
 
 async function compactDatabaseUI() {
@@ -459,6 +593,12 @@ function updateTelegramCardState() {
   if (card) card.style.opacity = enabled ? '1' : '0.5';
 }
 
+function updateGoogleAccountVisibility() {
+  const enabled = document.getElementById('google_auth_enabled')?.checked;
+  const section = document.getElementById('google-account-section');
+  if (section) section.style.display = enabled ? 'block' : 'none';
+}
+
 async function loadSettings() {
   try {
     const settings = await api.get('/settings');
@@ -494,6 +634,34 @@ async function loadSettings() {
     document.getElementById('notify_telegram_enabled').checked = settings.notify_telegram_enabled === '1' || settings.notify_telegram_enabled === 'true';
     document.getElementById('notify_telegram_bot_token').value = settings.notify_telegram_bot_token || '';
     document.getElementById('notify_telegram_chat_id').value = settings.notify_telegram_chat_id || '';
+
+    // Google OAuth settings
+    document.getElementById('google_auth_enabled').checked = settings.google_auth_enabled === '1' || settings.google_auth_enabled === 'true';
+    document.getElementById('google_client_id').value = settings.google_client_id || '';
+    document.getElementById('google_client_secret').value = settings.google_client_secret || '';
+    
+    updateGoogleAccountVisibility();
+    
+    // Callback URL (read-only)
+    const callbackUrl = window.location.origin + '/api/auth/google/callback';
+    document.getElementById('google_callback_url').value = callbackUrl;
+
+    // Account Linking status
+    const linkStatus = document.getElementById('google-link-status');
+    const linkEmail = document.getElementById('google-link-email');
+    const linkBtn = document.getElementById('link-google-btn');
+    
+    if (settings.google_user_id) {
+      linkStatus.textContent = 'Linked';
+      linkStatus.classList.add('text-success');
+      linkEmail.textContent = 'Your account is linked to Google.';
+      linkBtn.textContent = '🔗 Re-link Account';
+    } else {
+      linkStatus.textContent = 'Not linked';
+      linkStatus.classList.remove('text-success');
+      linkEmail.textContent = 'Link your Google account to enable one-click sign-in.';
+      linkBtn.textContent = '🔗 Link Account';
+    }
 
     // Update card states
     updateEmailCardState();
@@ -536,6 +704,10 @@ async function saveSettings(successMessage) {
       notify_telegram_enabled: document.getElementById('notify_telegram_enabled').checked ? '1' : '0',
       notify_telegram_bot_token: document.getElementById('notify_telegram_bot_token').value,
       notify_telegram_chat_id: document.getElementById('notify_telegram_chat_id').value,
+      // Google OAuth
+      google_auth_enabled: document.getElementById('google_auth_enabled').checked ? '1' : '0',
+      google_client_id: document.getElementById('google_client_id').value,
+      google_client_secret: document.getElementById('google_client_secret').value,
     };
 
     await api.put('/settings', settings);

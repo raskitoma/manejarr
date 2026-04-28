@@ -1,16 +1,34 @@
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import { getSetting } from '../db/database.js';
 
 /**
- * Express middleware for HTTP Basic Authentication.
- * Compares credentials against env vars or database settings.
+ * Express middleware for Authentication.
+ * Supports HTTP Basic Auth and JWT Bearer Tokens.
  */
 export function basicAuth(req, res, next) {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Basic ')) {
+  if (!authHeader) {
     return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  // ── Bearer Token (JWT) ──
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const decoded = jwt.verify(token, config.encryptionKey);
+      req.user = { username: decoded.username, googleUserId: decoded.googleUserId };
+      return next();
+    } catch (err) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+  }
+
+  // ── Basic Auth ──
+  if (!authHeader.startsWith('Basic ')) {
+    return res.status(401).json({ error: 'Invalid authentication method' });
   }
 
   const base64 = authHeader.slice(6);
