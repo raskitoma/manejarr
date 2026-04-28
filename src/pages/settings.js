@@ -146,7 +146,6 @@ export async function renderSettings() {
             </div>
           </div>
         </div>
-      </div> </div>
       </div>
 
       <!-- Notifications Tab -->
@@ -386,7 +385,10 @@ export async function renderSettings() {
           <div class="card">
             <div class="form-group">
               <label class="form-label" for="base_url">Base URL</label>
-              <input type="url" id="base_url" class="form-input" placeholder="https://manejarr.raskitoma.com" />
+              <div class="flex gap-sm">
+                <input type="url" id="base_url" class="form-input" placeholder="https://google.com" />
+                <button class="btn btn-secondary" id="detect-url-btn" title="Detect from current browser URL">🔍 Detect</button>
+              </div>
               <span class="form-hint">The public URL where Manejarr is accessible. Used for OAuth redirects and notifications.</span>
             </div>
             <div class="flex justify-end mt-md">
@@ -502,6 +504,11 @@ export async function renderSettings() {
   document.getElementById('google_auth_enabled')?.addEventListener('change', () => {
     updateGoogleAccountVisibility();
     saveSettings('Google Sign-in status updated');
+  });
+
+  document.getElementById('detect-url-btn')?.addEventListener('click', () => {
+    document.getElementById('base_url').value = window.location.origin;
+    showToast('URL detected from browser', 'success');
   });
 
   // 2FA & Passkey Events

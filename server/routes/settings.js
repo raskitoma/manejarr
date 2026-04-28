@@ -86,6 +86,7 @@ router.get('/', (req, res) => {
 router.put('/', (req, res) => {
   try {
     const updates = req.body;
+    console.log('[SETTINGS] Received updates:', updates);
     const oldGoogleId = getSetting('google_user_id');
 
     for (const [key, value] of Object.entries(updates)) {
