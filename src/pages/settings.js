@@ -778,7 +778,7 @@ async function loadSettings() {
 
     // ── Validation Status UI ──
     const updateValidationUI = (channel) => {
-      const isValidated = settings[`notify_${channel}_validated`] === '1';
+      const isValidated = settings[`notify_${channel}_validated`] == '1';
       const statusDiv = document.getElementById(`${channel}-validation-status`);
       const validateBtn = document.getElementById(`validate-${channel}-btn`);
       const toggle = document.getElementById(`notify_${channel}_enabled`);

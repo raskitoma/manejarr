@@ -39,6 +39,8 @@ export function getConnectionStatus() {
  */
 export async function runHealthCheck() {
   const now = new Date().toISOString();
+  console.log(`[HEALTH] Starting health check at ${now}...`);
+  
   const newlyDown = [];
   const recovered = [];
 
@@ -179,10 +181,11 @@ export function startHealthMonitor() {
 
   // Schedule every 15 minutes
   cron.schedule('*/15 * * * *', () => {
+    console.log('[HEALTH] Running scheduled health check...');
     runHealthCheck().catch(err => console.error('[HEALTH] Scheduled check failed:', err.message));
   }, {
     timezone: process.env.TZ || 'UTC',
   });
 
-  console.log('[HEALTH] Health monitor started (every 15 min)');
+  console.log('[HEALTH] Monitor started (Interval: 15m)');
 }

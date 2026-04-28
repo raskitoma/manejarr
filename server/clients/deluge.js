@@ -28,29 +28,42 @@ export function createDelugeClient({ host, port, password }) {
       headers['Cookie'] = sessionCookie;
     }
 
-    const response = await fetch(`${baseUrl}/json`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        method,
-        params,
-        id: requestId,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
-    // Capture session cookie from response
-    const setCookie = response.headers.get('set-cookie');
-    if (setCookie) {
-      sessionCookie = setCookie.split(';')[0];
+    try {
+      const response = await fetch(`${baseUrl}/json`, {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          method,
+          params,
+          id: requestId,
+        }),
+      });
+
+      // Capture session cookie from response
+      const setCookie = response.headers.get('set-cookie');
+      if (setCookie) {
+        sessionCookie = setCookie.split(';')[0];
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(`Deluge RPC error (${method}): ${data.error.message || JSON.stringify(data.error)}`);
+      }
+
+      return data.result;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Deluge RPC request timed out (${method}) after 10s`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(`Deluge RPC error (${method}): ${data.error.message || JSON.stringify(data.error)}`);
-    }
-
-    return data.result;
   }
 
   /**

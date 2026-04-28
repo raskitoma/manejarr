@@ -40,6 +40,23 @@ const router = Router();
 const challenges = new Map();
 
 /**
+ * Get the Relying Party ID (domain) for WebAuthn.
+ * Should be just the domain name, no protocol or port.
+ */
+function getRpId(req) {
+  const baseUrl = getSetting('base_url');
+  if (baseUrl && baseUrl.trim() !== '') {
+    try {
+      const url = new URL(baseUrl);
+      return url.hostname;
+    } catch (e) {
+      console.warn('[WEBAUTHN] Invalid base_url for rpID:', baseUrl);
+    }
+  }
+  return req.hostname;
+}
+
+/**
  * Public endpoint to get auth configuration.
  */
 router.get('/config', (req, res) => {
@@ -63,7 +80,7 @@ router.get('/config', (req, res) => {
 router.post('/passkey/register-options', async (req, res) => {
   const options = await generateRegistrationOptions({
     rpName: 'Manejarr',
-    rpID: req.hostname,
+    rpID: getRpId(req),
     userID: Buffer.from(config.adminUsername),
     userName: config.adminUsername,
     attestationType: 'none',
@@ -94,7 +111,7 @@ router.post('/passkey/register-verify', async (req, res) => {
       response: body,
       expectedChallenge,
       expectedOrigin,
-      expectedRPID: req.hostname,
+      expectedRPID: getRpId(req),
     });
 
     if (verification.verified && verification.registrationInfo) {
@@ -153,7 +170,7 @@ router.post('/passkey/login-options', async (req, res) => {
 
     console.log(`[WEBAUTHN] Sending ${allowCredentials.length} credentials to browser`);
     const options = await generateAuthenticationOptions({
-      rpID: req.hostname,
+      rpID: getRpId(req),
       allowCredentials,
       userVerification: 'preferred',
     });
@@ -182,7 +199,7 @@ router.post('/passkey/login-verify', async (req, res) => {
       response: body,
       expectedChallenge,
       expectedOrigin,
-      expectedRPID: req.hostname,
+      expectedRPID: getRpId(req),
       credential: {
         id: String(passkey.credential_id),
         publicKey: Buffer.from(passkey.public_key, 'base64'),
@@ -411,11 +428,29 @@ router.get('/google/callback', async (req, res) => {
 
       return res.send(`
         <html>
-          <body>
-            <script>
-              window.opener.postMessage({ type: 'google-auth-success', token: '${token}' }, window.location.origin);
-              window.close();
-            </script>
+          <body style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; background: #1a1a1a; color: white;">
+            <div style="text-align: center;">
+              <div style="margin-bottom: 20px;">Signing you in...</div>
+              <script>
+                (function() {
+                  const targetOrigin = window.location.origin;
+                  const data = { type: 'google-auth-success', token: '${token}' };
+                  
+                  if (window.opener) {
+                    try {
+                      window.opener.postMessage(data, targetOrigin);
+                      window.close();
+                    } catch (e) {
+                      console.error('PostMessage failed:', e);
+                      window.location.href = "/#/?google_token=${token}";
+                    }
+                  } else {
+                    // Fallback for browsers that block window.opener
+                    window.location.href = "/#/?google_token=${token}";
+                  }
+                })();
+              </script>
+            </div>
           </body>
         </html>
       `);
@@ -423,11 +458,29 @@ router.get('/google/callback', async (req, res) => {
       // Return ID for linking
       return res.send(`
         <html>
-          <body>
-            <script>
-              window.opener.postMessage({ type: 'google-auth-link', googleUserId: '${googleUserId}', email: '${payload.email}' }, window.location.origin);
-              window.close();
-            </script>
+          <body style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; background: #1a1a1a; color: white;">
+            <div style="text-align: center;">
+              <div style="margin-bottom: 20px;">Linking account...</div>
+              <script>
+                (function() {
+                  const targetOrigin = window.location.origin;
+                  const data = { type: 'google-auth-link', googleUserId: '${googleUserId}', email: '${payload.email}' };
+                  
+                  if (window.opener) {
+                    try {
+                      window.opener.postMessage(data, targetOrigin);
+                      window.close();
+                    } catch (e) {
+                      console.error('PostMessage failed:', e);
+                      window.location.href = "/#/settings?google_link_id=${googleUserId}&google_email=${payload.email}";
+                    }
+                  } else {
+                    // Fallback for browsers that block window.opener
+                    window.location.href = "/#/settings?google_link_id=${googleUserId}&google_email=${payload.email}";
+                  }
+                })();
+              </script>
+            </div>
           </body>
         </html>
       `);

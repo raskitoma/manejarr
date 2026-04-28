@@ -12,6 +12,7 @@ import {
   deleteAuthToken
 } from '../db/database.js';
 import { encrypt, decrypt, isEncrypted } from '../crypto/encryption.js';
+import { runHealthCheck } from '../monitors/healthCheck.js';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
@@ -123,6 +124,9 @@ router.put('/', (req, res) => {
       });
     }
 
+    // Trigger an immediate health check to update the dashboard dots
+    runHealthCheck().catch(err => console.error('[SETTINGS] Health check trigger failed:', err.message));
+
     res.json({ success: true, message: 'Settings saved' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -180,6 +184,9 @@ router.post('/validate/verify', async (req, res) => {
 
   setSetting(`notify_${channel}_validated`, '1');
   deleteAuthToken(token);
+
+  // Trigger an immediate health check to update the dashboard dots
+  runHealthCheck().catch(err => console.error('[VALIDATE] Health check trigger failed:', err.message));
 
   res.json({ success: true });
 });

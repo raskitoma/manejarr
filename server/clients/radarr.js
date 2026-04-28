@@ -23,10 +23,24 @@ export function createRadarrClient({ host, port, apiKey }) {
       ...options.headers,
     };
 
-    return fetch(url, {
-      ...options,
-      headers,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Radarr API request timed out (${endpoint}) after 10s`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   /**
