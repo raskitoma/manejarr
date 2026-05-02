@@ -12,6 +12,8 @@
  */
 
 import { meetsQualityCutoff, getQualityName } from './quality.js';
+import { extractSeriesBase, buildSeriesBaseMap, isSeriesPattern, isMoviePattern } from '../utils/seriesParser.js';
+import { buildRadarrMetadata, buildSonarrMetadata } from '../utils/metadataBuilders.js';
 
 /**
  * Execute Phase 1.
@@ -68,6 +70,12 @@ export async function executePhase1(clients, settings, options = {}, log) {
     return summary;
   }
 
+  // Build a series-base -> seriesId map from torrents that already have a cached
+  // Sonarr match. This lets us match a brand-new episode-style torrent (e.g. the
+  // next episode of an already-known series) without needing a Sonarr hash hit
+  // or a successful filename parse. Map grows during the run as new matches land.
+  const seriesBaseMap = buildSeriesBaseMap(torrents, existingMetadata);
+
   // Pre-fetch quality profiles for both services
   let radarrProfiles = {};
   let sonarrProfiles = {};
@@ -94,77 +102,150 @@ export async function executePhase1(clients, settings, options = {}, log) {
       let manager = null;
       let cached = existingMetadata?.[torrent.hash];
 
-      // 2a. Determine manager (check cache first)
-      if (cached && cached.manager) {
+      // 2a. Cache shortcut — but ONLY for manual matches (explicit user
+      // links via the manual-match modal). Auto-discovered matches are
+      // re-validated through the full chain on every run so Run Now /
+      // Dry Run produce identical results to Rematch All (which clears
+      // the cache before running). Trusting cached auto matches without
+      // re-validation was the bug: a torrent matched once via series-base
+      // (or any other heuristic) would silently keep that match across
+      // future runs even if the *arr's library now disagrees.
+      const manualMatchId = cached?.metadata?.manualMatchId;
+      if (manualMatchId && cached?.manager) {
         manager = cached.manager;
-        log('info', 'engine', `Using cached manager "${manager}" for torrent "${torrent.name}"`);
-        
-        if (cached.metadata && cached.metadata.manualMatchId) {
-          log('info', 'engine', `Using manual match ID ${cached.metadata.manualMatchId} for "${torrent.name}"`);
-          if (manager === 'radarr') {
-            torrent._match = { source: 'manual', movieId: cached.metadata.manualMatchId };
-          } else if (manager === 'sonarr') {
-            try {
-              const episodes = await sonarr.getEpisodes(cached.metadata.manualMatchId);
-              const episodesWithFiles = episodes.filter(e => e.hasFile);
-              torrent._match = { 
-                source: 'manual', 
-                seriesId: cached.metadata.manualMatchId, 
-                episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' })) 
-              };
-            } catch (err) {
-              log('error', 'sonarr', `Failed to fetch episodes for manual match series ${cached.metadata.manualMatchId}: ${err.message}`);
-            }
+        log('info', 'engine', `Using manual match id=${manualMatchId} (${manager}) for "${torrent.name}"`);
+        if (manager === 'radarr') {
+          torrent._match = { source: 'manual', movieId: manualMatchId };
+        } else if (manager === 'sonarr') {
+          try {
+            const episodes = await sonarr.getEpisodes(manualMatchId);
+            const episodesWithFiles = episodes.filter(e => e.hasFile);
+            torrent._match = {
+              source: 'manual',
+              seriesId: manualMatchId,
+              episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' }))
+            };
+          } catch (err) {
+            log('error', 'sonarr', `Failed to fetch episodes for manual match series ${manualMatchId}: ${err.message}`);
+            // Manual match references a series that's gone — drop it and
+            // let the full chain run.
+            manager = null;
+            torrent._match = null;
           }
         }
       }
 
+      // Pattern-based routing so series-shaped names skip Radarr (and vice
+      // versa). Prevents Radarr's greedy /parse from cross-mapping a torrent
+      // like "Greys.Anatomy.S22E17" onto an unrelated movie.
+      const seriesShape = isSeriesPattern(torrent.name);
+      const movieShape = isMoviePattern(torrent.name);
+      const allowRadarr = !seriesShape;
+      const allowSonarr = !movieShape;
+
       // 2b. Try matching (if not cached or cache invalid)
       if (!manager) {
-        const radarrMatch = await radarr.getMovieByHash(torrent.hash);
-        if (radarrMatch) {
-          manager = 'radarr';
-          torrent._match = radarrMatch; 
-        } else {
-          const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash);
+        if (allowRadarr) {
+          const radarrMatch = await radarr.getMovieByHash(torrent.hash, torrent.name);
+          if (radarrMatch) {
+            manager = 'radarr';
+            torrent._match = radarrMatch;
+            if (radarrMatch.source === 'history-name') {
+              log('info', 'radarr', `History sourceTitle fallback matched "${torrent.name}" to movie ID ${radarrMatch.movieId}`);
+            }
+          }
+        }
+        if (!manager && allowSonarr) {
+          const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash, torrent.name);
           if (sonarrMatch) {
             manager = 'sonarr';
             torrent._match = sonarrMatch;
+            if (sonarrMatch.source === 'history-name') {
+              log('info', 'sonarr', `History sourceTitle fallback matched "${torrent.name}" to series ID ${sonarrMatch.seriesId}`);
+            }
           }
         }
 
-        // Fallback: Parse filename to match if hash matching failed
-        if (!manager) {
+        // Path-based fallback: scan history for a record whose dropped/imported
+        // path includes this torrent's name.
+        if (!manager && allowRadarr) {
           try {
-             const parsedRadarr = await radarr.parseFilename(torrent.name);
-             if (parsedRadarr.movie) {
-               const movieFiles = await radarr.getMovieFiles(parsedRadarr.movie.id);
-               if (movieFiles && movieFiles.length > 0) {
-                  manager = 'radarr';
-                  torrent._match = { source: 'parse', movieId: parsedRadarr.movie.id };
-                  log('info', 'radarr', `Fallback matching via filename successful for "${torrent.name}"`);
-               }
-             }
-          } catch(e) {}
-          
-          if (!manager) {
-            try {
-               const parsedSonarr = await sonarr.parseFilename(torrent.name);
-               if (parsedSonarr.series) {
-                 const episodes = await sonarr.getEpisodes(parsedSonarr.series.id);
-                 const episodesWithFiles = episodes.filter(e => e.hasFile);
-                 if (episodesWithFiles.length > 0) {
-                   manager = 'sonarr';
-                   torrent._match = { 
-                     source: 'parse', 
-                     seriesId: parsedSonarr.series.id, 
-                     episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' })) 
-                   };
-                   log('info', 'sonarr', `Fallback matching via filename successful for "${torrent.name}"`);
-                 }
-               }
-            } catch(e) {}
-          }
+            const pathMatch = await radarr.findMovieByPath(torrent.name);
+            if (pathMatch?.movieId) {
+              manager = 'radarr';
+              torrent._match = pathMatch;
+              log('info', 'radarr', `History path fallback matched "${torrent.name}" to movie ID ${pathMatch.movieId}`);
+            }
+          } catch (e) { /* path lookup is best-effort */ }
+        }
+        if (!manager && allowSonarr) {
+          try {
+            const pathMatch = await sonarr.findEpisodesByPath(torrent.name);
+            if (pathMatch?.seriesId) {
+              manager = 'sonarr';
+              torrent._match = pathMatch;
+              log('info', 'sonarr', `History path fallback matched "${torrent.name}" to series ID ${pathMatch.seriesId}`);
+            }
+          } catch (e) { /* path lookup is best-effort */ }
+        }
+
+        // Fallback: parse filename. Accept a Radarr movie / Sonarr series
+        // match as soon as the *arr parser identifies it — even if there
+        // are no imported files yet (the torrent may still be downloading
+        // or pending import). Previously we required at least one
+        // imported episode/file, which is why Run Now / Dry Run missed
+        // matches that the per-row Auto-match button (which trusts the
+        // parse result directly) was finding.
+        if (!manager && allowRadarr) {
+          try {
+            const parsedRadarr = await radarr.parseFilename(torrent.name);
+            if (parsedRadarr?.movie?.id) {
+              manager = 'radarr';
+              torrent._match = { source: 'parse', movieId: parsedRadarr.movie.id };
+              log('info', 'radarr', `Fallback matching via filename successful for "${torrent.name}"`);
+            }
+          } catch (e) { /* parse fallback is best-effort */ }
+        }
+
+        if (!manager && allowSonarr) {
+          try {
+            const parsedSonarr = await sonarr.parseFilename(torrent.name);
+            if (parsedSonarr?.series?.id) {
+              const episodes = await sonarr.getEpisodes(parsedSonarr.series.id);
+              const episodesWithFiles = (episodes || []).filter(e => e.hasFile);
+              manager = 'sonarr';
+              torrent._match = {
+                source: 'parse',
+                seriesId: parsedSonarr.series.id,
+                episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' }))
+              };
+              log('info', 'sonarr', `Fallback matching via filename successful for "${torrent.name}" (${episodesWithFiles.length} imported episode(s))`);
+            }
+          } catch (e) { /* parse fallback is best-effort */ }
+        }
+
+        // Fallback: same-series grouping. If another already-matched torrent
+        // shares this one's normalized series base name, reuse its seriesId.
+        // Same loosening as above — accept the grouping even if the series
+        // has no imported files yet, so the manager pill still shows up.
+        if (!manager && allowSonarr) {
+            const base = extractSeriesBase(torrent.name);
+            const seriesId = base ? seriesBaseMap.get(base) : null;
+            if (seriesId) {
+              try {
+                const episodes = await sonarr.getEpisodes(seriesId);
+                const episodesWithFiles = (episodes || []).filter(e => e.hasFile);
+                manager = 'sonarr';
+                torrent._match = {
+                  source: 'series-base',
+                  seriesId,
+                  episodes: episodesWithFiles.map(e => ({ episodeId: e.id, quality: e.episodeFile?.quality, eventType: 'downloadFolderImported' }))
+                };
+                log('info', 'sonarr', `Series-base fallback matched "${torrent.name}" to series ID ${seriesId} (${episodesWithFiles.length} imported episode(s))`);
+              } catch (err) {
+                log('warn', 'sonarr', `Series-base fallback failed for "${torrent.name}": ${err.message}`);
+              }
+            }
         }
       }
 
@@ -175,7 +256,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
 
       // ── RADARR BLOCK ──
       if (manager === 'radarr') {
-        const radarrMatch = torrent._match || await radarr.getMovieByHash(torrent.hash);
+        const radarrMatch = torrent._match || await radarr.getMovieByHash(torrent.hash, torrent.name);
         
         // Handle cache invalidation or mismatch
         if (!radarrMatch) {
@@ -236,7 +317,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
               quality: fileQualityName,
               qualityMet,
               limitMet,
-              metadata: buildRadarrMetadata(movie),
+              metadata: { ...buildRadarrMetadata(movie), source: torrent._match?.source || 'hash' },
             });
             continue;
           } else {
@@ -247,7 +328,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
               action: 'skipped',
               reason: 'No imported files in Radarr',
               manager: 'radarr',
-              metadata: buildRadarrMetadata(movie),
+              metadata: { ...buildRadarrMetadata(movie), source: torrent._match?.source || 'hash' },
             });
             continue;
           }
@@ -257,7 +338,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
       // ── SONARR BLOCK ──
       // Fallthrough from Radarr if manager was reset to null
       if (!manager) {
-        const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash);
+        const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash, torrent.name);
         if (sonarrMatch) {
             manager = 'sonarr';
             torrent._match = sonarrMatch;
@@ -265,7 +346,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
       }
 
       if (manager === 'sonarr') {
-        const sonarrMatch = torrent._match || await sonarr.getEpisodesByHash(torrent.hash);
+        const sonarrMatch = torrent._match || await sonarr.getEpisodesByHash(torrent.hash, torrent.name);
         
         if (!sonarrMatch) {
           log('warn', 'sonarr', `Cache mismatch or no episodes found for "${torrent.name}" in Sonarr. Skipping.`);
@@ -279,6 +360,13 @@ export async function executePhase1(clients, settings, options = {}, log) {
           continue;
         } else {
           log('info', 'sonarr', `Matched torrent "${torrent.name}" to series ID ${sonarrMatch.seriesId}`);
+
+          // Register this torrent's series-base so later torrents in this run
+          // can be grouped via the same-series-base fallback.
+          const baseKey = extractSeriesBase(torrent.name);
+          if (baseKey && sonarrMatch.seriesId && !seriesBaseMap.has(baseKey)) {
+            seriesBaseMap.set(baseKey, sonarrMatch.seriesId);
+          }
 
           const series = sonarrMatch.series || await sonarr.getSeriesById(sonarrMatch.seriesId);
           const profile = sonarrProfiles[series.qualityProfileId];
@@ -339,7 +427,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
               episodes: episodeIds.length,
               allQualityMet,
               limitMet,
-              metadata: buildSonarrMetadata(series),
+              metadata: { ...buildSonarrMetadata(series), source: torrent._match?.source || 'hash' },
             });
             continue;
           } else {
@@ -350,7 +438,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
               action: 'skipped',
               reason: 'No imported files in Sonarr',
               manager: 'sonarr',
-              metadata: buildSonarrMetadata(series),
+              metadata: { ...buildSonarrMetadata(series), source: torrent._match?.source || 'hash' },
             });
             continue;
           }
@@ -386,44 +474,3 @@ export async function executePhase1(clients, settings, options = {}, log) {
   return summary;
 }
 
-/**
- * Build rich metadata for Radarr movies.
- */
-function buildRadarrMetadata(movie) {
-  let infoUrl = null;
-  if (movie.imdbId) {
-    infoUrl = `https://www.imdb.com/title/${movie.imdbId}`;
-  } else if (movie.tmdbId) {
-    infoUrl = `https://www.themoviedb.org/movie/${movie.tmdbId}`;
-  }
-
-  return {
-    title: movie.title,
-    year: movie.year,
-    images: movie.images,
-    infoUrl: infoUrl,
-    managerUrl: `/movie/${movie.id}`,
-    id: movie.id,
-  };
-}
-
-/**
- * Build rich metadata for Sonarr series.
- */
-function buildSonarrMetadata(series) {
-  let infoUrl = null;
-  if (series.imdbId) {
-    infoUrl = `https://www.imdb.com/title/${series.imdbId}`;
-  } else if (series.tvdbId) {
-    infoUrl = `https://www.thetvdb.com/series/${series.tvdbId}`;
-  }
-
-  return {
-    title: series.title,
-    year: series.year,
-    images: series.images,
-    infoUrl: infoUrl,
-    managerUrl: `/series/${series.id}`,
-    id: series.id,
-  };
-}

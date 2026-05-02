@@ -112,7 +112,8 @@ export function createDelugeClient({ host, port, password }) {
     const fields = [
       'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
       'state', 'paused', 'total_size', 'progress', 'tracker_host',
-      'download_payload_rate', 'upload_payload_rate', 'files'
+      'download_payload_rate', 'upload_payload_rate', 'files',
+      'save_path', 'download_location'
     ];
 
     const result = await rpc('core.get_torrents_status', [filterDict, fields]);
@@ -135,6 +136,7 @@ export function createDelugeClient({ host, port, password }) {
         downloadSpeed: data.download_payload_rate,
         uploadSpeed: data.upload_payload_rate,
         files: data.files || [],
+        savePath: data.download_location || data.save_path || '',
       });
     }
 
@@ -155,7 +157,8 @@ export function createDelugeClient({ host, port, password }) {
     const fields = [
       'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
       'state', 'paused', 'total_size', 'progress', 'tracker_host',
-      'download_payload_rate', 'upload_payload_rate', 'files'
+      'download_payload_rate', 'upload_payload_rate', 'files',
+      'save_path', 'download_location'
     ];
 
     const result = await rpc('core.get_torrent_status', [hash, fields]);
@@ -176,6 +179,7 @@ export function createDelugeClient({ host, port, password }) {
       downloadSpeed: result.download_payload_rate,
       uploadSpeed: result.upload_payload_rate,
       files: result.files || [],
+      savePath: result.download_location || result.save_path || '',
     };
   }
 

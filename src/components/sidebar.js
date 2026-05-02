@@ -4,6 +4,7 @@
 import { clearCredentials } from '../utils/api.js';
 import { t, setLanguage, getLanguage } from '../utils/i18n.js';
 import { toggleTheme, getCurrentTheme } from '../utils/theme.js';
+import { renderCustomSelect, attachCustomSelect } from './customSelect.js';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊', hash: '#/dashboard' },
@@ -33,11 +34,18 @@ export function renderSidebar(activeRoute) {
     </nav>
     <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: var(--space-md);">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 var(--space-xs);">
-        <select id="lang-select" class="form-input lang-select-dropdown" style="width: auto; min-width: 100px; padding: 4px 1.8rem 4px 8px; font-size: 0.85rem;">
-          <option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option>
-          <option value="es" ${getLanguage() === 'es' ? 'selected' : ''}>Español</option>
-        </select>
-        <button id="theme-toggle-btn" class="btn btn-sm" style="background: transparent; border: 1px solid var(--border-color); padding: 4px 8px;" title="${getCurrentTheme() === 'dark' ? t('light_mode') : t('dark_mode')}">
+        ${renderCustomSelect({
+          id: 'lang-select',
+          value: getLanguage(),
+          options: [
+            { value: 'en', label: 'English', icon: '<span class="lang-tag">EN</span>' },
+            { value: 'es', label: 'Español', icon: '<span class="lang-tag">ES</span>' },
+          ],
+          minWidth: '0',
+          showLabelInTrigger: false,
+          triggerClass: 'compact',
+        })}
+        <button id="theme-toggle-btn" class="btn btn-sm" style="background: transparent; border: 1px solid var(--border-color); padding: 4px 8px; height: 32px;" title="${getCurrentTheme() === 'dark' ? t('light_mode') : t('dark_mode')}">
           ${getCurrentTheme() === 'dark' ? '🌙' : '☀️'}
         </button>
       </div>
@@ -65,8 +73,8 @@ export function renderSidebar(activeRoute) {
   });
 
   // Language
-  document.getElementById('lang-select')?.addEventListener('change', (e) => {
-    setLanguage(e.target.value);
+  attachCustomSelect('lang-select', (value) => {
+    setLanguage(value);
   });
 
   // Theme

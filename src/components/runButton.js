@@ -51,6 +51,12 @@ async function triggerRun(dryRun, onStatusChange) {
 
     showToast(`${dryRun ? t('dry_run') : t('run_now')} ${t('started')}...`, 'info');
 
+    // Notify the dashboard immediately so siblings (Rematch All) lock now,
+    // not after the first 2s poll tick.
+    if (onStatusChange) {
+      onStatusChange({ running: true, runType: dryRun ? 'dry-run' : 'manual' });
+    }
+
     await api.post('/run', { dryRun });
 
     // Start polling for status

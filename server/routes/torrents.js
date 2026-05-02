@@ -4,6 +4,8 @@ import { runFull, getRunStatus } from '../engine/orchestrator.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
 import { decrypt } from '../crypto/encryption.js';
+import { extractSeriesBase, isSeriesPattern, isMoviePattern } from '../utils/seriesParser.js';
+import { buildRadarrMetadata, buildSonarrMetadata } from '../utils/metadataBuilders.js';
 
 export const torrentsRouter = Router();
 
@@ -89,10 +91,11 @@ torrentsRouter.post('/rematch-all', async (req, res) => {
     // Clear all cached metadata so the next run re-discovers everything
     const cleared = clearAllTorrentMetadata();
 
-    // Start a fresh run (non-blocking)
+    // Metadata-only run: re-discover matches and refresh persisted metadata
+    // for every torrent. NO Deluge relabel, NO *arr unmonitor, NO Phase 2.
+    // Rematch All must never trigger the side effects that Run Now does.
     const runPromise = runFull({
-      dryRun: false,
-      runType: 'manual',
+      metadataOnly: true,
     });
 
     res.json({
@@ -130,16 +133,55 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
     }
     
     const mediaId = parseInt(id, 10);
-    
+
+    // Build a full metadata block (with images / infoUrl / managerUrl) so the
+    // dashboard hover card shows the poster immediately, before the next run.
+    let primaryMetadata = { manualMatchId: mediaId };
+    let resolvedTitle = title;
+    try {
+      if (manager === 'radarr') {
+        const radarrHost = getSetting('radarr_host');
+        const radarrApiKey = getSetting('radarr_api_key');
+        if (radarrHost && radarrApiKey) {
+          const radarr = createRadarrClient({
+            host: radarrHost,
+            port: parseInt(getSetting('radarr_port'), 10) || 7878,
+            apiKey: decrypt(radarrApiKey),
+          });
+          const movie = await radarr.getMovie(mediaId);
+          if (movie) {
+            primaryMetadata = { ...buildRadarrMetadata(movie), manualMatchId: mediaId };
+            resolvedTitle = resolvedTitle || movie.title;
+          }
+        }
+      } else {
+        const sonarrHost = getSetting('sonarr_host');
+        const sonarrApiKey = getSetting('sonarr_api_key');
+        if (sonarrHost && sonarrApiKey) {
+          const sonarr = createSonarrClient({
+            host: sonarrHost,
+            port: parseInt(getSetting('sonarr_port'), 10) || 8989,
+            apiKey: decrypt(sonarrApiKey),
+          });
+          const series = await sonarr.getSeriesById(mediaId);
+          if (series) {
+            primaryMetadata = { ...buildSonarrMetadata(series), manualMatchId: mediaId };
+            resolvedTitle = resolvedTitle || series.title;
+          }
+        }
+      }
+    } catch (err) {
+      // Best-effort enrichment — fall back to the bare manualMatchId if it fails
+      console.warn('[MATCH] Metadata enrichment failed:', err.message);
+    }
+
     // Save the primary match
     updateTorrentMetadata(hash, {
       manager,
-      title: title || `Manual Match (${manager} ID: ${mediaId})`,
-      metadata: {
-        manualMatchId: mediaId,
-      }
+      title: resolvedTitle || `Manual Match (${manager} ID: ${mediaId})`,
+      metadata: primaryMetadata,
     });
-    
+
     let alsoMatched = 0;
     
     // For Sonarr series: try to auto-match related episode torrents
@@ -179,10 +221,8 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
                 if (otherBase && otherBase === seriesBase) {
                   updateTorrentMetadata(torrent.hash, {
                     manager: 'sonarr',
-                    title: title || `Auto Match (sonarr ID: ${mediaId})`,
-                    metadata: {
-                      manualMatchId: mediaId,
-                    }
+                    title: resolvedTitle || `Auto Match (sonarr ID: ${mediaId})`,
+                    metadata: primaryMetadata,
                   });
                   alsoMatched++;
                 }
@@ -207,38 +247,6 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
 });
 
 /**
- * Extract the base series name from a torrent filename.
- * Strips episode identifiers (S01E05, etc.), quality tags, and release group info
- * to get just the series name for comparison.
- * 
- * Examples:
- *   "The Boss 2022 S04E07 The Bosses House 1080p" → "the boss 2022"
- *   "Greys.Anatomy.S22E17.1080p.WEB.h264" → "greys anatomy"
- */
-function extractSeriesBase(name) {
-  if (!name) return null;
-  
-  const cleaned = name
-    // Replace dots, underscores, hyphens with spaces
-    .replace(/[\.\-_]/g, ' ')
-    // Find where the season/episode marker starts and take everything before it
-    .replace(/\b(S\d{1,2})(E\d{1,2})?\b.*/i, '')
-    // Also handle "Season X" or "Complete" patterns
-    .replace(/\b(Season|Complete|COMPLETE)\b.*/i, '')
-    // Remove year in parentheses but keep standalone years (they help identify the series)
-    .replace(/\((\d{4})\)/g, '$1')
-    // Remove any remaining brackets
-    .replace(/[\[\](){}]/g, '')
-    // Collapse whitespace
-    .replace(/\s{2,}/g, ' ')
-    .trim()
-    .toLowerCase();
-  
-  // Must have at least 2 characters to be useful
-  return cleaned.length >= 2 ? cleaned : null;
-}
-
-/**
  * DELETE /api/torrents/:hash/match
  * Unlink a torrent from its current match so it can be re-matched.
  */
@@ -252,6 +260,237 @@ torrentsRouter.delete('/:hash/match', (req, res) => {
     deleteTorrentMetadata(hash);
     res.json({ success: true, message: 'Torrent unlinked successfully' });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/torrents/:hash/rematch
+ * Run the matching pipeline for a single torrent without doing a full
+ * orchestration run: clears any cached match, then tries hash lookup,
+ * filename parse, and series-base grouping (against other already-matched
+ * Sonarr torrents). Saves the new metadata if anything sticks.
+ */
+torrentsRouter.post('/:hash/rematch', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    if (!hash) {
+      return res.status(400).json({ error: 'Missing hash' });
+    }
+
+    // Need Deluge to look up the torrent's name (and to seed the series-base map)
+    const delugeHost = getSetting('deluge_host');
+    const delugePassword = getSetting('deluge_password');
+    if (!delugeHost || !delugePassword) {
+      return res.status(400).json({ error: 'Deluge is not configured' });
+    }
+
+    const radarrHost = getSetting('radarr_host');
+    const radarrApiKey = getSetting('radarr_api_key');
+    const sonarrHost = getSetting('sonarr_host');
+    const sonarrApiKey = getSetting('sonarr_api_key');
+
+    const { createDelugeClient } = await import('../clients/deluge.js');
+    const deluge = createDelugeClient({
+      host: delugeHost,
+      port: parseInt(getSetting('deluge_port'), 10) || 8112,
+      password: decrypt(delugePassword),
+    });
+    await deluge.connect();
+
+    const torrent = await deluge.getTorrentDetails(hash);
+    if (!torrent) {
+      return res.status(404).json({ error: 'Torrent not found in Deluge' });
+    }
+
+    const radarr = (radarrHost && radarrApiKey)
+      ? createRadarrClient({
+          host: radarrHost,
+          port: parseInt(getSetting('radarr_port'), 10) || 7878,
+          apiKey: decrypt(radarrApiKey),
+        })
+      : null;
+
+    const sonarr = (sonarrHost && sonarrApiKey)
+      ? createSonarrClient({
+          host: sonarrHost,
+          port: parseInt(getSetting('sonarr_port'), 10) || 8989,
+          apiKey: decrypt(sonarrApiKey),
+        })
+      : null;
+
+    // Wipe any prior match so a stale id doesn't poison the same-series map
+    deleteTorrentMetadata(hash);
+
+    // Pattern-based routing so a series-shaped name (S01E05, 1x05, etc.)
+    // never gets handed to Radarr's lookup/parser, which is greedy and will
+    // happily map "Greys.Anatomy.S22E17" to some unrelated movie title.
+    const seriesShape = isSeriesPattern(torrent.name);
+    const movieShape = isMoviePattern(torrent.name);
+    const allowRadarr = !!radarr && !seriesShape;
+    const allowSonarr = !!sonarr && !movieShape;
+
+    let matched = null; // { manager, title, metadata }
+
+    // 1. Hash → Radarr (with sourceTitle history fallback)
+    if (!matched && allowRadarr) {
+      try {
+        const movieMatch = await radarr.getMovieByHash(hash, torrent.name);
+        if (movieMatch?.movieId) {
+          const movie = await radarr.getMovie(movieMatch.movieId);
+          matched = {
+            manager: 'radarr',
+            title: movie.title,
+            metadata: { ...buildRadarrMetadata(movie), source: movieMatch.source || 'hash' },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Radarr hash lookup failed:', err.message);
+      }
+    }
+
+    // 2. Hash → Sonarr (with sourceTitle history fallback)
+    if (!matched && allowSonarr) {
+      try {
+        const epMatch = await sonarr.getEpisodesByHash(hash, torrent.name);
+        if (epMatch?.seriesId) {
+          const series = epMatch.series || await sonarr.getSeriesById(epMatch.seriesId);
+          matched = {
+            manager: 'sonarr',
+            title: series.title,
+            metadata: { ...buildSonarrMetadata(series), source: epMatch.source || 'hash' },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Sonarr hash lookup failed:', err.message);
+      }
+    }
+
+    // 2b. Download path → Radarr/Sonarr history.
+    // Tertiary authoritative tie: the path Radarr/Sonarr reported when
+    // handing the download to Deluge should contain the torrent name.
+    if (!matched && allowRadarr) {
+      try {
+        const pathMatch = await radarr.findMovieByPath(torrent.name);
+        if (pathMatch?.movieId) {
+          const movie = await radarr.getMovie(pathMatch.movieId);
+          matched = {
+            manager: 'radarr',
+            title: movie.title,
+            metadata: { ...buildRadarrMetadata(movie), source: pathMatch.source },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Radarr path lookup failed:', err.message);
+      }
+    }
+
+    if (!matched && allowSonarr) {
+      try {
+        const pathMatch = await sonarr.findEpisodesByPath(torrent.name);
+        if (pathMatch?.seriesId) {
+          const series = await sonarr.getSeriesById(pathMatch.seriesId);
+          matched = {
+            manager: 'sonarr',
+            title: series.title,
+            metadata: { ...buildSonarrMetadata(series), source: pathMatch.source },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Sonarr path lookup failed:', err.message);
+      }
+    }
+
+    // 3. Filename parse → Radarr
+    if (!matched && allowRadarr) {
+      try {
+        const parsed = await radarr.parseFilename(torrent.name);
+        if (parsed?.movie?.id) {
+          const movieFiles = await radarr.getMovieFiles(parsed.movie.id);
+          if (movieFiles && movieFiles.length > 0) {
+            const movie = await radarr.getMovie(parsed.movie.id);
+            matched = {
+              manager: 'radarr',
+              title: movie.title,
+              metadata: { ...buildRadarrMetadata(movie), source: 'parse' },
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Radarr parse failed:', err.message);
+      }
+    }
+
+    // 4. Filename parse → Sonarr
+    if (!matched && allowSonarr) {
+      try {
+        const parsed = await sonarr.parseFilename(torrent.name);
+        if (parsed?.series?.id) {
+          const series = await sonarr.getSeriesById(parsed.series.id);
+          matched = {
+            manager: 'sonarr',
+            title: series.title,
+            metadata: { ...buildSonarrMetadata(series), source: 'parse' },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Sonarr parse failed:', err.message);
+      }
+    }
+
+    // 5. Series-base grouping fallback (Sonarr only)
+    if (!matched && allowSonarr) {
+      const base = extractSeriesBase(torrent.name);
+      if (base) {
+        try {
+          const allTorrents = await deluge.getAllTorrents();
+          const existingMetadata = getAllTorrentMetadata();
+          for (const other of allTorrents) {
+            if (other.hash === hash) continue;
+            const cached = existingMetadata[other.hash];
+            if (!cached || cached.manager !== 'sonarr') continue;
+            const seriesId = cached.metadata?.manualMatchId || cached.metadata?.id;
+            if (!seriesId) continue;
+            if (extractSeriesBase(other.name) !== base) continue;
+
+            const series = await sonarr.getSeriesById(seriesId);
+            matched = {
+              manager: 'sonarr',
+              title: series.title,
+              metadata: { ...buildSonarrMetadata(series), manualMatchId: seriesId, source: 'series-base' },
+            };
+            break;
+          }
+        } catch (err) {
+          console.warn('[REMATCH] Series-base fallback failed:', err.message);
+        }
+      }
+    }
+
+    if (!matched) {
+      return res.json({
+        success: true,
+        matched: false,
+        message: 'No match found via hash, filename parse, or series-base grouping.',
+      });
+    }
+
+    updateTorrentMetadata(hash, {
+      manager: matched.manager,
+      title: matched.title,
+      metadata: matched.metadata,
+    });
+
+    res.json({
+      success: true,
+      matched: true,
+      manager: matched.manager,
+      title: matched.title,
+      source: matched.metadata.source,
+      message: `Matched to ${matched.title} via ${matched.metadata.source}`,
+    });
+  } catch (err) {
+    console.error('[REMATCH] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

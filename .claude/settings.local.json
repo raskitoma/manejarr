@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check server/engine/phase1.js)",
+      "Bash(node --check server/routes/torrents.js)",
+      "Bash(node --check server/clients/sonarr.js)",
+      "Bash(node --check server/clients/radarr.js)",
+      "Bash(node --check server/utils/seriesParser.js)",
+      "Bash(node --check server/clients/deluge.js)",
+      "Bash(node --check src/components/torrentCard.js)",
+      "Bash(node --check src/pages/dashboard.js)",
+      "Bash(node --check server/utils/metadataBuilders.js)",
+      "Bash(node --check src/components/sidebar.js)",
+      "Bash(node --check src/pages/logs.js)",
+      "Bash(node --check src/components/customSelect.js)",
+      "Bash(node --check src/components/datePicker.js)",
+      "Bash(node --check src/components/dateRangePicker.js)",
+      "Bash(node --check server/routes/dashboard.js)",
+      "Bash(node --check src/components/runButton.js)"
+    ]
+  }
+}

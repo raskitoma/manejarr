@@ -30,8 +30,14 @@ app.get('/api/health', (req, res) => {
 
 // ── Protected API routes ──
 app.use('/api', (req, res, next) => {
-  // Allow image proxy and auth config without authentication
-  if ((req.path === '/dashboard/proxy-image' && req.method === 'GET') || req.path.startsWith('/auth/')) {
+  // Image endpoints have to be loadable from <img src=...> which can't carry
+  // Authorization headers — they're skipped here and only forward already-
+  // public CDN content (or *arr API content via the server's own keys).
+  const isImageGet = req.method === 'GET' && (
+    req.path === '/dashboard/proxy-image' ||
+    req.path === '/dashboard/poster'
+  );
+  if (isImageGet || req.path.startsWith('/auth/')) {
     return next();
   }
   basicAuth(req, res, next);

@@ -133,6 +133,11 @@ const DICTIONARY = {
     rematch_complete: 'Rematch complete! Check results below.',
     unlink_confirm: 'Unlink this torrent from its current match?',
     unlink_success: 'Torrent unlinked. It will be re-matched on the next run.',
+    auto_rematch_success: 'Matched to',
+    auto_rematch_no_match: 'No match found for this torrent.',
+    filter_by_manager: 'Filter by manager',
+    filter_all: 'All',
+    no_results_for_filter: 'No results for this filter',
   },
   es: {
     // General
@@ -262,6 +267,11 @@ const DICTIONARY = {
     rematch_complete: '¡Reemparejamiento completado! Revisa los resultados abajo.',
     unlink_confirm: '¿Desvincular este torrent de su coincidencia actual?',
     unlink_success: 'Torrent desvinculado. Se reemparejará en la próxima ejecución.',
+    auto_rematch_success: 'Vinculado a',
+    auto_rematch_no_match: 'No se encontró coincidencia para este torrent.',
+    filter_by_manager: 'Filtrar por gestor',
+    filter_all: 'Todos',
+    no_results_for_filter: 'No hay resultados para este filtro',
   }
 };
 

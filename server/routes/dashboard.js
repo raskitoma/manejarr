@@ -132,8 +132,82 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/poster?manager=sonarr|radarr&id=123
+ *
+ * Live-fetch fallback for the poster of a matched item. Used by the row
+ * action menu when the persisted metadata.images array is empty (older
+ * matches saved before images were persisted, or items where the *arr's
+ * MediaCover URL has rotated). Calls getMovie/getSeriesById, picks the
+ * poster image, and pipes it via the existing proxy logic — falling back
+ * to the remote (TMDB/TVDB) CDN URL if the *arr's local cache 404s.
+ */
+router.get('/poster', async (req, res) => {
+  try {
+    const { manager, id } = req.query;
+    if (!manager || !id) return res.status(400).json({ error: 'Missing manager or id' });
+
+    const host = getSetting(`${manager}_host`);
+    const port = getSetting(`${manager}_port`) || (manager === 'radarr' ? 7878 : 8989);
+    const apiKey = decrypt(getSetting(`${manager}_api_key`) || '');
+    if (!host || !apiKey) return res.status(404).send('Service not configured');
+
+    let images = null;
+    if (manager === 'radarr') {
+      const client = createRadarrClient({ host, port, apiKey });
+      const movie = await client.getMovie(parseInt(id, 10));
+      images = movie?.images || [];
+      const poster = images.find(i => i.coverType === 'poster') || images.find(i => i.coverType === 'fanart');
+      if (!poster) return res.status(404).send('No poster available');
+      const targetUrl = (poster.url || '').replace(/^\/api\/v3/, '');
+      if (targetUrl) {
+        try {
+          const r = await client.requestRaw(targetUrl);
+          if (r.ok) {
+            res.set('Content-Type', r.headers.get('Content-Type') || 'image/jpeg');
+            res.set('Cache-Control', 'public, max-age=86400');
+            const buf = await r.arrayBuffer();
+            return res.send(Buffer.from(buf));
+          }
+        } catch (e) { /* fall through to remoteUrl */ }
+      }
+      // Fall back to the TMDB CDN remoteUrl — no API key required.
+      if (poster.remoteUrl) return res.redirect(poster.remoteUrl);
+      return res.status(404).send('No poster available');
+    }
+
+    if (manager === 'sonarr') {
+      const client = createSonarrClient({ host, port, apiKey });
+      const series = await client.getSeriesById(parseInt(id, 10));
+      images = series?.images || [];
+      const poster = images.find(i => i.coverType === 'poster') || images.find(i => i.coverType === 'fanart');
+      if (!poster) return res.status(404).send('No poster available');
+      const targetUrl = (poster.url || '').replace(/^\/api\/v3/, '');
+      if (targetUrl) {
+        try {
+          const r = await client.requestRaw(targetUrl);
+          if (r.ok) {
+            res.set('Content-Type', r.headers.get('Content-Type') || 'image/jpeg');
+            res.set('Cache-Control', 'public, max-age=86400');
+            const buf = await r.arrayBuffer();
+            return res.send(Buffer.from(buf));
+          }
+        } catch (e) { /* fall through to remoteUrl */ }
+      }
+      // Fall back to the TVDB CDN remoteUrl — no API key required.
+      if (poster.remoteUrl) return res.redirect(poster.remoteUrl);
+      return res.status(404).send('No poster available');
+    }
+
+    return res.status(400).json({ error: 'Invalid manager' });
+  } catch (err) {
+    console.error('[POSTER] Error:', err.message);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+/**
  * GET /api/dashboard/proxy-image
- * Proxies image requests to Radarr/Sonarr. 
+ * Proxies image requests to Radarr/Sonarr.
  * Prevents API key exposure and bypasses network restrictions.
  */
 router.get('/proxy-image', async (req, res) => {

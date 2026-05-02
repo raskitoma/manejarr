@@ -6,11 +6,13 @@ import { api } from '../utils/api.js';
 import { showToast } from '../components/toast.js';
 import { formatDateTime, getLevelBadgeClass } from '../utils/formatters.js';
 import { t } from '../utils/i18n.js';
+import { renderCustomSelect, attachCustomSelect } from '../components/customSelect.js';
+import { renderDateRangePicker, attachDateRangePicker } from '../components/dateRangePicker.js';
 
 let currentEventPage = 1;
 let currentRunPage = 1;
-let currentFilters = {};
-let currentRunFilters = {};
+let currentFilters = { level: '', category: '', startDate: '', endDate: '', runId: '' };
+let currentRunFilters = { runType: '', status: '' };
 
 export async function renderLogs() {
   const container = document.getElementById('page-content');
@@ -30,42 +32,54 @@ export async function renderLogs() {
       <div id="tab-events" class="tab-pane active">
         <!-- Filters -->
         <div class="card mb-lg">
-          <div class="flex items-center gap-md flex-wrap">
-            <div class="form-group" style="margin-bottom: 0; min-width: 130px;">
+          <div class="filter-row">
+            <div class="filter-cell">
               <label class="form-label">Level</label>
-              <select id="filter-level" class="form-input">
-                <option value="">All</option>
-                <option value="info">Info</option>
-                <option value="warn">Warning</option>
-                <option value="error">Error</option>
-              </select>
+              ${renderCustomSelect({
+                id: 'filter-level',
+                value: '',
+                options: [
+                  { value: '',      label: 'All' },
+                  { value: 'info',  label: 'Info',    icon: 'ℹ️' },
+                  { value: 'warn',  label: 'Warning', icon: '⚠️' },
+                  { value: 'error', label: 'Error',   icon: '⛔' },
+                ],
+                minWidth: '130px',
+              })}
             </div>
-            <div class="form-group" style="margin-bottom: 0; min-width: 130px;">
+            <div class="filter-cell">
               <label class="form-label">Category</label>
-              <select id="filter-category" class="form-input">
-                <option value="">All</option>
-                <option value="engine">Engine</option>
-                <option value="deluge">Deluge</option>
-                <option value="radarr">Radarr</option>
-                <option value="sonarr">Sonarr</option>
-              </select>
+              ${renderCustomSelect({
+                id: 'filter-category',
+                value: '',
+                options: [
+                  { value: '',       label: 'All' },
+                  { value: 'engine', label: 'Engine' },
+                  { value: 'deluge', label: 'Deluge' },
+                  { value: 'radarr', label: 'Radarr' },
+                  { value: 'sonarr', label: 'Sonarr' },
+                ],
+                minWidth: '130px',
+              })}
             </div>
-            <div class="form-group" style="margin-bottom: 0; min-width: 160px;">
-              <label class="form-label">Start Date</label>
-              <input type="date" id="filter-start-date" class="form-input" />
+            <div class="filter-cell">
+              <label class="form-label">Date range</label>
+              ${renderDateRangePicker({ id: 'filter-date-range', minWidth: '280px' })}
             </div>
-            <div class="form-group" style="margin-bottom: 0; min-width: 160px;">
-              <label class="form-label">End Date</label>
-              <input type="date" id="filter-end-date" class="form-input" />
-            </div>
-            <div class="form-group" style="margin-bottom: 0; max-width: 80px;">
+            <div class="filter-cell" style="max-width: 110px;">
               <label class="form-label">${t('run_id')}</label>
-              <input type="number" id="filter-run-id" class="form-input" placeholder="ID" min="1" />
+              <div class="number-pill">
+                <input type="number" id="filter-run-id" placeholder="ID" min="1" />
+                <div class="number-pill-spinners">
+                  <button type="button" class="number-pill-step" data-step="up" tabindex="-1" aria-label="Increase">▴</button>
+                  <button type="button" class="number-pill-step" data-step="down" tabindex="-1" aria-label="Decrease">▾</button>
+                </div>
+              </div>
             </div>
-            <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
+            <div class="filter-cell filter-cell-action">
               <button class="btn btn-secondary" id="apply-filters-btn">${t('reset')}</button>
             </div>
-            <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
+            <div class="filter-cell filter-cell-action">
               <button class="btn btn-secondary" id="export-csv-btn">📥 Export CSV</button>
             </div>
           </div>
@@ -100,27 +114,37 @@ export async function renderLogs() {
       <div id="tab-runs" class="tab-pane">
         <!-- Filters -->
         <div class="card mb-lg">
-          <div class="flex items-center gap-md flex-wrap">
-            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+          <div class="filter-row">
+            <div class="filter-cell">
               <label class="form-label">Type</label>
-              <select id="filter-run-type" class="form-input">
-                <option value="">All</option>
-                <option value="manual">Manual</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="dry-run">Dry Run</option>
-                <option value="compact">Maintenance</option>
-              </select>
+              ${renderCustomSelect({
+                id: 'filter-run-type',
+                value: '',
+                options: [
+                  { value: '',          label: 'All' },
+                  { value: 'manual',    label: 'Manual' },
+                  { value: 'scheduled', label: 'Scheduled' },
+                  { value: 'dry-run',   label: 'Dry Run' },
+                  { value: 'compact',   label: 'Maintenance' },
+                ],
+                minWidth: '140px',
+              })}
             </div>
-            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+            <div class="filter-cell">
               <label class="form-label">Status</label>
-              <select id="filter-run-status" class="form-input">
-                <option value="">All</option>
-                <option value="running">Running</option>
-                <option value="success">Success</option>
-                <option value="error">Error</option>
-              </select>
+              ${renderCustomSelect({
+                id: 'filter-run-status',
+                value: '',
+                options: [
+                  { value: '',        label: 'All' },
+                  { value: 'running', label: 'Running' },
+                  { value: 'success', label: 'Success' },
+                  { value: 'error',   label: 'Error' },
+                ],
+                minWidth: '140px',
+              })}
             </div>
-            <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
+            <div class="filter-cell filter-cell-action">
               <button class="btn btn-secondary" id="apply-run-filters-btn">${t('reset')}</button>
             </div>
           </div>
@@ -181,20 +205,37 @@ export async function renderLogs() {
     }
   });
 
-  // Wire up filter button
-  const applyBtn = document.getElementById('apply-filters-btn');
-  applyBtn?.addEventListener('click', () => {
-    // Now functions as a "Clear/Reset" button
-    const levelInput = document.getElementById('filter-level');
-    const categoryInput = document.getElementById('filter-category');
-    const startInput = document.getElementById('filter-start-date');
-    const endInput = document.getElementById('filter-end-date');
-    const runIdInput = document.getElementById('filter-run-id');
+  // Helper: visibly reset a custom-select to its first option ("All").
+  const resetCustomSelect = (id, fallbackLabel = 'All') => {
+    const wrapper = document.querySelector(`.custom-select[data-cs-id="${id}"]`);
+    if (!wrapper) return;
+    const valueEl = wrapper.querySelector('.custom-select-value');
+    if (valueEl) valueEl.textContent = fallbackLabel;
+    wrapper.querySelectorAll('.custom-select-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.csValue === '');
+    });
+  };
 
-    if (levelInput) levelInput.value = '';
-    if (categoryInput) categoryInput.value = '';
-    if (startInput) startInput.value = '';
-    if (endInput) endInput.value = '';
+  // Helper: visibly reset the range picker to the empty state.
+  const resetDateRangePicker = (id) => {
+    const wrapper = document.querySelector(`.date-range-picker[data-drp-id="${id}"]`);
+    if (!wrapper) return;
+    wrapper.dataset.drpStart = '';
+    wrapper.dataset.drpEnd = '';
+    const valEl = wrapper.querySelector('.date-picker-value');
+    if (valEl) {
+      valEl.textContent = 'Date range';
+      valEl.classList.add('placeholder');
+    }
+    wrapper.querySelector('.date-picker-clear')?.remove();
+  };
+
+  // Reset button — clear all event filters and re-load.
+  document.getElementById('apply-filters-btn')?.addEventListener('click', () => {
+    resetCustomSelect('filter-level');
+    resetCustomSelect('filter-category');
+    resetDateRangePicker('filter-date-range');
+    const runIdInput = document.getElementById('filter-run-id');
     if (runIdInput) runIdInput.value = '';
 
     currentEventPage = 1;
@@ -202,45 +243,71 @@ export async function renderLogs() {
     loadEventLogs();
   });
 
-  // Auto-refresh on filter change
-  ['filter-level', 'filter-category', 'filter-start-date', 'filter-end-date', 'filter-run-id'].forEach(id => {
-    document.getElementById(id)?.addEventListener(id.includes('run-id') ? 'input' : 'change', () => {
-      currentEventPage = 1;
-      const runIdVal = document.getElementById('filter-run-id')?.value || '';
-      currentFilters = {
-        level: document.getElementById('filter-level')?.value || '',
-        category: document.getElementById('filter-category')?.value || '',
-        startDate: document.getElementById('filter-start-date')?.value || '',
-        endDate: document.getElementById('filter-end-date')?.value || '',
-        runId: parseInt(runIdVal, 10) > 0 ? runIdVal : '',
-      };
-      loadEventLogs();
+  // Wire each event filter to update currentFilters and reload.
+  attachCustomSelect('filter-level', (val) => {
+    currentEventPage = 1;
+    currentFilters.level = val;
+    loadEventLogs();
+  });
+  attachCustomSelect('filter-category', (val) => {
+    currentEventPage = 1;
+    currentFilters.category = val;
+    loadEventLogs();
+  });
+  // Single range picker — emits {start, end} as SQLite-compatible UTC
+  // timestamp strings. Bounds are auto-swapped server-side / by the picker
+  // itself, so the user can't accidentally pick "tomorrow as start, yesterday
+  // as end". Quick presets cover Today / Yesterday / Last 7 days / Last 30
+  // days / This month / Last month and time-precision Right now / Last 6 hours.
+  attachDateRangePicker('filter-date-range', ({ start, end }) => {
+    currentEventPage = 1;
+    currentFilters.startDate = start;
+    currentFilters.endDate = end;
+    loadEventLogs();
+  });
+  const runIdInput = document.getElementById('filter-run-id');
+  runIdInput?.addEventListener('input', (e) => {
+    currentEventPage = 1;
+    const v = e.target.value;
+    currentFilters.runId = parseInt(v, 10) > 0 ? v : '';
+    loadEventLogs();
+  });
+
+  // Custom number-pill spinners — use the input's native stepUp/stepDown
+  // and re-fire the input event so the filter logic above runs.
+  document.querySelectorAll('.number-pill .number-pill-step').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const pill = btn.closest('.number-pill');
+      const input = pill?.querySelector('input[type="number"]');
+      if (!input) return;
+      if (!input.value) input.value = '0';
+      if (btn.dataset.step === 'up') input.stepUp(); else input.stepDown();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
   });
 
   // Export CSV
   document.getElementById('export-csv-btn')?.addEventListener('click', exportCSV);
 
-  // Wire up run log filters
+  // Run-log filters
   document.getElementById('apply-run-filters-btn')?.addEventListener('click', () => {
-    const typeInput = document.getElementById('filter-run-type');
-    const statusInput = document.getElementById('filter-run-status');
-    if (typeInput) typeInput.value = '';
-    if (statusInput) statusInput.value = '';
+    resetCustomSelect('filter-run-type');
+    resetCustomSelect('filter-run-status');
     currentRunPage = 1;
     currentRunFilters = { runType: '', status: '' };
     loadRunLogs();
   });
 
-  ['filter-run-type', 'filter-run-status'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      currentRunPage = 1;
-      currentRunFilters = {
-        runType: document.getElementById('filter-run-type')?.value || '',
-        status: document.getElementById('filter-run-status')?.value || '',
-      };
-      loadRunLogs();
-    });
+  attachCustomSelect('filter-run-type', (val) => {
+    currentRunPage = 1;
+    currentRunFilters.runType = val;
+    loadRunLogs();
+  });
+  attachCustomSelect('filter-run-status', (val) => {
+    currentRunPage = 1;
+    currentRunFilters.status = val;
+    loadRunLogs();
   });
 
   // Load initial data

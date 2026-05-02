@@ -88,11 +88,15 @@ function buildClients() {
  *
  * @param {Object} options
  * @param {boolean} options.dryRun - If true, simulate without making changes
- * @param {string} options.runType - 'manual' | 'scheduled' | 'dry-run'
+ * @param {boolean} options.metadataOnly - If true, only re-discover matches and
+ *   refresh metadata. NO side effects: no Deluge relabel, no *arr unmonitor,
+ *   no Phase 2. Used by Rematch All — that button must never produce the
+ *   side effects of Run Now / Dry Run, only refresh the match cache.
+ * @param {string} options.runType - 'manual' | 'scheduled' | 'dry-run' | 'rematch'
  * @returns {Object} - Full run result with Phase 1 and Phase 2 summaries
  */
 export async function runFull(options = {}) {
-  const { dryRun = false, runType = 'manual' } = options;
+  const { dryRun = false, runType = 'manual', metadataOnly = false } = options;
 
   // Concurrency guard
   if (isRunning) {
@@ -100,7 +104,14 @@ export async function runFull(options = {}) {
   }
 
   isRunning = true;
-  const effectiveRunType = dryRun ? 'dry-run' : runType;
+  // Phase 1 side-effects are gated on its `dryRun` parameter, so a
+  // metadata-only run forces phase1's dryRun to true while keeping its
+  // own runType label so the UI / logs can distinguish it.
+  const phase1DryRun = dryRun || metadataOnly;
+  let effectiveRunType;
+  if (metadataOnly) effectiveRunType = 'rematch';
+  else if (dryRun) effectiveRunType = 'dry-run';
+  else effectiveRunType = runType;
   currentRunType = effectiveRunType;
 
   // Create run log entry
@@ -129,8 +140,8 @@ export async function runFull(options = {}) {
     // Build clients
     const clients = buildClients();
 
-    // Ensure labels exist in Deluge
-    if (!dryRun) {
+    // Ensure labels exist in Deluge — only when we're going to write to it.
+    if (!phase1DryRun) {
       try {
         await clients.deluge.connect();
         await clients.deluge.addLabel('media');
@@ -145,16 +156,30 @@ export async function runFull(options = {}) {
     const minSeedingTime = parseInt(getSetting('min_seeding_time'), 10) || 259200; // 3 days
     const minRatio = parseFloat(getSetting('min_ratio')) || 1.1;
 
-    // Get existing persistent metadata to avoid re-matching
+    // Get existing persistent metadata. For Rematch All the cache was just
+    // cleared by the route, so this is empty — phase1 falls through to the
+    // full match chain for every torrent.
     const existingMetadata = getAllTorrentMetadata();
 
     // ── Phase 1: Verification & Monitoring ──
-    log('info', 'engine', '═══ Phase 1: Verification & Monitoring ═══');
-    const phase1Result = await executePhase1(clients, { minSeedingTime, minRatio }, { dryRun, existingMetadata }, log);
+    // metadataOnly forces phase1DryRun=true so phase1 still discovers
+    // matches and builds metadata but does NOT relabel torrents in Deluge
+    // and does NOT unmonitor anything in Radarr/Sonarr.
+    log('info', 'engine', metadataOnly
+      ? '═══ Phase 1: Match discovery (metadata-only) ═══'
+      : '═══ Phase 1: Verification & Monitoring ═══');
+    const phase1Result = await executePhase1(clients, { minSeedingTime, minRatio }, { dryRun: phase1DryRun, existingMetadata }, log);
 
     // ── Phase 2: Retention & Cleanup ──
-    log('info', 'engine', '═══ Phase 2: Retention & Cleanup ═══');
-    const phase2Result = await executePhase2(clients, { minSeedingTime, minRatio }, { dryRun }, log);
+    // Skipped entirely for metadata-only runs. Rematch All must never
+    // transition torrents to fordeletion or run cleanup.
+    let phase2Result = { processed: 0, transitioned: 0, errors: 0, details: [] };
+    if (metadataOnly) {
+      log('info', 'engine', '═══ Phase 2 skipped (metadata-only run) ═══');
+    } else {
+      log('info', 'engine', '═══ Phase 2: Retention & Cleanup ═══');
+      phase2Result = await executePhase2(clients, { minSeedingTime, minRatio }, { dryRun }, log);
+    }
 
     // Build summary
     const summary = {
