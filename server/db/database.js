@@ -356,6 +356,28 @@ export function getAllTorrentMetadata() {
 }
 
 /**
+ * Delete metadata for a single torrent hash.
+ */
+export function deleteTorrentMetadata(hash) {
+  db.run('DELETE FROM torrent_metadata WHERE hash = ?', [hash]);
+  saveDatabase();
+}
+
+/**
+ * Clear all torrent metadata (used for rematch-all).
+ */
+export function clearAllTorrentMetadata() {
+  const countStmt = db.prepare('SELECT COUNT(*) as total FROM torrent_metadata');
+  countStmt.step();
+  const total = countStmt.getAsObject().total;
+  countStmt.free();
+  
+  db.run('DELETE FROM torrent_metadata');
+  saveDatabase();
+  return { deleted: total };
+}
+
+/**
  * Clear metadata for hashes that are no longer present in the provided list.
  */
 export function compactDatabase(activeHashes) {

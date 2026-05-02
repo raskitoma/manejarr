@@ -128,6 +128,11 @@ const DICTIONARY = {
     search_hint: 'Type to search Radarr & Sonarr for matching media',
     no_results: 'No results found',
     link_success: 'Linked successfully to',
+    rematch_all: 'Rematch All',
+    rematch_all_confirm: 'This will clear ALL cached matches and re-run the matching process.\n\nAre you sure?',
+    rematch_complete: 'Rematch complete! Check results below.',
+    unlink_confirm: 'Unlink this torrent from its current match?',
+    unlink_success: 'Torrent unlinked. It will be re-matched on the next run.',
   },
   es: {
     // General
@@ -252,6 +257,11 @@ const DICTIONARY = {
     search_hint: 'Escribe para buscar en Radarr y Sonarr',
     no_results: 'No se encontraron resultados',
     link_success: 'Vinculado correctamente a',
+    rematch_all: 'Reemparejar Todo',
+    rematch_all_confirm: 'Esto borrará TODAS las coincidencias guardadas y ejecutará el proceso de emparejamiento de nuevo.\n\n¿Estás seguro?',
+    rematch_complete: '¡Reemparejamiento completado! Revisa los resultados abajo.',
+    unlink_confirm: '¿Desvincular este torrent de su coincidencia actual?',
+    unlink_success: 'Torrent desvinculado. Se reemparejará en la próxima ejecución.',
   }
 };
 

@@ -33,7 +33,7 @@ export function renderSidebar(activeRoute) {
     </nav>
     <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: var(--space-md);">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 var(--space-xs);">
-        <select id="lang-select" class="lang-select-dropdown" style="background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 4px; font-size: 0.85rem; cursor: pointer;">
+        <select id="lang-select" class="form-input lang-select-dropdown" style="width: auto; min-width: 100px; padding: 4px 1.8rem 4px 8px; font-size: 0.85rem;">
           <option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option>
           <option value="es" ${getLanguage() === 'es' ? 'selected' : ''}>Español</option>
         </select>

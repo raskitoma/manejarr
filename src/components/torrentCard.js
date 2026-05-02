@@ -39,6 +39,9 @@ export function renderTorrentRow(torrent) {
                  <button class="btn-icon link-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}" title="Rematch">
                    <span class="icon">🔄</span>
                  </button>
+                 <button class="btn-icon unlink-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}" title="Unlink">
+                   <span class="icon">❌</span>
+                 </button>
                </div>`
             : `<button class="btn btn-sm btn-secondary link-torrent-btn" data-hash="${torrent.hash}" data-name="${torrent.name.replace(/"/g, '&quot;')}">🔗 Link</button>`
           }

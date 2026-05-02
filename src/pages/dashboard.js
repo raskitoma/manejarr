@@ -34,6 +34,9 @@ export async function renderDashboard() {
           <span class="search-icon">🔍</span>
           <input type="text" id="torrent-search" class="form-input search-input" placeholder="${t('search')}...">
         </div>
+        <button class="btn btn-accent" id="rematch-all-btn" title="Clear all cached matches and re-run matching">
+          <span class="btn-icon">🔄</span> ${t('rematch_all')}
+        </button>
         <div id="run-buttons"></div>
         <select id="label-filter" class="form-input" style="width: auto; min-width: 140px;">
           <option value="">${t('all_labels')}</option>
@@ -208,17 +211,71 @@ function initDashboardEvents() {
     });
   }
 
-  // Torrent Actions (Link)
+  // Torrent Actions (Link / Unlink)
   if (tableBody) {
-    tableBody.addEventListener('click', (e) => {
+    tableBody.addEventListener('click', async (e) => {
       const linkBtn = e.target.closest('.link-torrent-btn');
       if (linkBtn) {
         const hash = linkBtn.dataset.hash;
         const name = linkBtn.dataset.name;
         openLinkModal(hash, name);
+        return;
+      }
+      
+      const unlinkBtn = e.target.closest('.unlink-torrent-btn');
+      if (unlinkBtn) {
+        const hash = unlinkBtn.dataset.hash;
+        const name = unlinkBtn.dataset.name;
+        if (!confirm(`${t('unlink_confirm') || 'Unlink this torrent from its current match?'}\n\n${name}`)) return;
+        try {
+          unlinkBtn.disabled = true;
+          await api.delete(`/torrents/${hash}/match`);
+          showToast(t('unlink_success') || 'Torrent unlinked. It will be re-matched on the next run.', 'success');
+          await loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+          unlinkBtn.disabled = false;
+        }
+        return;
       }
     });
   }
+
+  // Rematch All Button
+  document.getElementById('rematch-all-btn')?.addEventListener('click', async () => {
+    if (!confirm(t('rematch_all_confirm') || 'This will clear ALL cached matches and re-run the matching process.\n\nAre you sure?')) return;
+    
+    const btn = document.getElementById('rematch-all-btn');
+    try {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner"></span> ${t('running') || 'Running...'}`;
+      
+      const result = await api.post('/torrents/rematch-all');
+      showToast(result.message || 'Rematch started', 'success');
+      
+      // Start polling for run status
+      const checkStatus = setInterval(async () => {
+        try {
+          const status = await api.get('/run/status');
+          if (!status.running) {
+            clearInterval(checkStatus);
+            btn.disabled = false;
+            btn.innerHTML = `<span class="btn-icon">🔄</span> ${t('rematch_all')}`;
+            await loadDashboardData();
+            showToast(t('rematch_complete') || 'Rematch complete! Check results below.', 'success');
+          }
+        } catch (e) {
+          clearInterval(checkStatus);
+          btn.disabled = false;
+          btn.innerHTML = `<span class="btn-icon">🔄</span> ${t('rematch_all')}`;
+        }
+      }, 2000);
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = `<span class="btn-icon">🔄</span> ${t('rematch_all')}`;
+    }
+  });
 
   // Render run buttons
   renderRunButtons('run-buttons', (status) => {
@@ -560,13 +617,17 @@ function openLinkModal(hash, name) {
       resultsContainer.querySelectorAll('.match-link-btn').forEach(b => { b.disabled = true; });
       target.closest('.match-result-item')?.classList.add('linking');
       
-      await api.post(`/torrents/${hash}/match`, { 
+      const response = await api.post(`/torrents/${hash}/match`, { 
         manager: result.manager, 
         id: mediaId,
         title: result.title
       });
       
-      showToast(`${t('link_success') || 'Linked successfully to'} "${result.title}"`, 'success');
+      // Use the server's message which includes auto-match count for series
+      const toastMsg = response.alsoMatched > 0
+        ? `${t('link_success') || 'Linked successfully to'} "${result.title}" (+${response.alsoMatched} related)`
+        : `${t('link_success') || 'Linked successfully to'} "${result.title}"`;
+      showToast(toastMsg, 'success');
       closeMatchModal();
       loadDashboardData();
     } catch (err) {
