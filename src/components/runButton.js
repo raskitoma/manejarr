@@ -38,14 +38,14 @@ async function triggerRun(dryRun, onStatusChange) {
       runBtn.disabled = true; 
       if (!dryRun) {
         runBtn.classList.add('btn-running-animated');
-        runBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+        runBtn.innerHTML = `<span class="spinner"></span> ${t('running')}`;
       }
     }
     if (dryBtn) { 
       dryBtn.disabled = true; 
       if (dryRun) {
         dryBtn.classList.add('btn-running-animated');
-        dryBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+        dryBtn.innerHTML = `<span class="spinner"></span> ${t('running')}`;
       }
     }
 
@@ -170,10 +170,10 @@ export function setRunButtonsEnabled(enabled, runStatus = { running: false }) {
     // Apply animation to the active button if it's one of these
     if (runStatus.runType === 'manual' || runStatus.runType === 'run') {
       runBtn.classList.add('btn-running-animated');
-      runBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+      runBtn.innerHTML = `<span class="spinner"></span> ${t('running')}`;
     } else if (runStatus.runType === 'dry-run') {
       dryBtn.classList.add('btn-running-animated');
-      dryBtn.innerHTML = `<span class="spinner"></span> ${t('running')}...`;
+      dryBtn.innerHTML = `<span class="spinner"></span> ${t('running')}`;
     }
     return;
   }

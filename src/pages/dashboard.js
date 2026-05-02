@@ -539,7 +539,7 @@ function initDashboardEvents() {
     const btn = document.getElementById('rematch-all-btn');
     try {
       btn.disabled = true;
-      btn.innerHTML = `<span class="spinner"></span> ${t('running') || 'Running...'}`;
+      btn.innerHTML = `<span class="spinner"></span> ${t('running') || 'Running'}`;
       // Lock the run-now / dry-run buttons immediately. Pass originator
       // 'rematch' so syncActionButtons masks the runType — Run Now must
       // not get the spinner during a rematch.
