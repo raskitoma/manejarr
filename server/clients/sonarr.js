@@ -26,7 +26,7 @@ export function createSonarrClient({ host, port, apiKey }) {
     };
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 20000);
 
     try {
       const response = await fetch(url, {
@@ -37,7 +37,7 @@ export function createSonarrClient({ host, port, apiKey }) {
       return response;
     } catch (err) {
       if (err.name === 'AbortError') {
-        throw new Error(`Sonarr API request timed out (${endpoint}) after 10s`);
+        throw new Error(`Sonarr API request timed out (${endpoint}) after 20s`);
       }
       throw err;
     } finally {

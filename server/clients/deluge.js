@@ -29,7 +29,7 @@ export function createDelugeClient({ host, port, password }) {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 20000);
 
     try {
       const response = await fetch(`${baseUrl}/json`, {
@@ -58,7 +58,7 @@ export function createDelugeClient({ host, port, password }) {
       return data.result;
     } catch (err) {
       if (err.name === 'AbortError') {
-        throw new Error(`Deluge RPC request timed out (${method}) after 10s`);
+        throw new Error(`Deluge RPC request timed out (${method}) after 20s`);
       }
       throw err;
     } finally {
