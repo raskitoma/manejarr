@@ -112,7 +112,7 @@ export function createDelugeClient({ host, port, password }) {
     const fields = [
       'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
       'state', 'paused', 'total_size', 'progress', 'tracker_host',
-      'download_payload_rate', 'upload_payload_rate', 'files',
+      'download_payload_rate', 'upload_payload_rate',
       'save_path', 'download_location'
     ];
 
@@ -157,7 +157,7 @@ export function createDelugeClient({ host, port, password }) {
     const fields = [
       'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
       'state', 'paused', 'total_size', 'progress', 'tracker_host',
-      'download_payload_rate', 'upload_payload_rate', 'files',
+      'download_payload_rate', 'upload_payload_rate',
       'save_path', 'download_location'
     ];
 

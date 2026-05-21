@@ -45,7 +45,7 @@ async function test() {
 
   try {
     console.log('Running Phase 1 test...');
-    const result = await executePhase1(clients, { dryRun: true }, log);
+    const result = await executePhase1(clients, {}, { dryRun: true }, log);
     console.log('Phase 1 result details count:', result.details?.length);
   } catch (err) {
     console.error('Phase 1 failed:', err);
