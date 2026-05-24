@@ -44,7 +44,8 @@ export async function executePhase1(clients, settings, options = {}, log) {
   let torrents = [];
   try {
     await deluge.connect();
-    const allTorrents = await deluge.getAllTorrents();
+    // Query only the fields necessary for validation & matching to optimize throughput over VPN
+    const allTorrents = await deluge.getAllTorrents(['name', 'hash', 'label', 'ratio', 'seeding_time']);
     
     // Categorize torrents for processing
     // - 'media' or other labels: target for processing/relabeling

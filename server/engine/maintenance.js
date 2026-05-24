@@ -29,7 +29,8 @@ export async function runMaintenance() {
     });
 
     await deluge.connect();
-    const torrents = await deluge.getAllTorrents();
+    // Query only the hashes of torrents to check active presence for db compaction
+    const torrents = await deluge.getAllTorrents(['hash']);
     const hashes = torrents.map(t => t.hash);
 
     const result = compactDatabase(hashes);

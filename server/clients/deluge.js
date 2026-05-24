@@ -91,6 +91,15 @@ export function createDelugeClient({ host, port, password }) {
     const plugins = await rpc('core.get_enabled_plugins');
     if (!plugins.includes('Label')) {
       console.warn('[DELUGE] Label plugin is not enabled. Labels will not work.');
+    } else {
+      // Ensure our default labels exist on connect
+      try {
+        await addLabel('media');
+        await addLabel('ignore');
+        await addLabel('fordeletion');
+      } catch (err) {
+        console.warn('[DELUGE] Failed to ensure default labels exist on connect:', err.message);
+      }
     }
 
     return true;
@@ -107,9 +116,9 @@ export function createDelugeClient({ host, port, password }) {
   /**
    * Get all torrents with a specific label.
    */
-  async function getTorrentsByLabel(label) {
+  async function getTorrentsByLabel(label, customFields = null) {
     const filterDict = label ? { label } : {};
-    const fields = [
+    const fields = customFields || [
       'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
       'state', 'paused', 'total_size', 'progress', 'tracker_host',
       'download_payload_rate', 'upload_payload_rate',
@@ -124,7 +133,7 @@ export function createDelugeClient({ host, port, password }) {
       torrents.push({
         hash,
         name: data.name,
-        label: data.label || '',
+        label: data.label !== undefined ? data.label : '',
         ratio: data.ratio,
         seedingTime: data.seeding_time,
         timeAdded: data.time_added,
@@ -146,8 +155,8 @@ export function createDelugeClient({ host, port, password }) {
   /**
    * Get all torrents.
    */
-  async function getAllTorrents() {
-    return await getTorrentsByLabel(null);
+  async function getAllTorrents(customFields = null) {
+    return await getTorrentsByLabel(null, customFields);
   }
 
   /**

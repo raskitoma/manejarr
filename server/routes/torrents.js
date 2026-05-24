@@ -200,10 +200,7 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
           });
           
           await deluge.connect();
-          const allTorrents = await deluge.getAllTorrents();
-          
-          // Get the name of the matched torrent to extract the series pattern
-          const matchedTorrent = allTorrents.find(t => t.hash === hash);
+          const matchedTorrent = await deluge.getTorrentDetails(hash);
           if (matchedTorrent) {
             const seriesBase = extractSeriesBase(matchedTorrent.name);
             
@@ -211,7 +208,10 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
               // Get existing metadata to skip already-matched torrents
               const existingMetadata = getAllTorrentMetadata();
               
-              for (const torrent of allTorrents) {
+              // Only query other unmatched torrents (which would be labeled 'media') to keep payloads small
+              const candidateTorrents = await deluge.getTorrentsByLabel('media', ['name', 'hash', 'label']);
+              
+              for (const torrent of candidateTorrents) {
                 // Skip the torrent we just matched and already-matched ones
                 if (torrent.hash === hash) continue;
                 if (existingMetadata[torrent.hash]) continue;
@@ -443,7 +443,7 @@ torrentsRouter.post('/:hash/rematch', async (req, res) => {
       const base = extractSeriesBase(torrent.name);
       if (base) {
         try {
-          const allTorrents = await deluge.getAllTorrents();
+          const allTorrents = await deluge.getAllTorrents(['name', 'hash']);
           const existingMetadata = getAllTorrentMetadata();
           for (const other of allTorrents) {
             if (other.hash === hash) continue;

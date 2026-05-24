@@ -36,11 +36,12 @@ router.get('/', async (req, res) => {
 
     await deluge.connect();
 
-    // Fetch all torrents in a single query and filter in memory to prevent multiple roundtrips and timeouts on Deluge WebUI
-    const delugeTorrents = await deluge.getAllTorrents();
-    const mediaTorrents = delugeTorrents.filter(t => t.label === 'media');
-    const ignoreTorrents = delugeTorrents.filter(t => t.label === 'ignore');
-    const forDeletionTorrents = delugeTorrents.filter(t => t.label === 'fordeletion');
+    // Fetch only the relevant labels in parallel to prevent massive payload transmission and timeouts on Deluge WebUI
+    const [mediaTorrents, ignoreTorrents, forDeletionTorrents] = await Promise.all([
+      deluge.getTorrentsByLabel('media'),
+      deluge.getTorrentsByLabel('ignore'),
+      deluge.getTorrentsByLabel('fordeletion')
+    ]);
 
     const allTorrents = [
       ...mediaTorrents,
