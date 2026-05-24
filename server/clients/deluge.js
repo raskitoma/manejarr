@@ -114,10 +114,9 @@ export function createDelugeClient({ host, port, password }) {
   }
 
   /**
-   * Get all torrents with a specific label.
+   * Get all torrents directly from Deluge.
    */
-  async function getTorrentsByLabel(label, customFields = null) {
-    const filterDict = label ? { label } : {};
+  async function getAllTorrents(customFields = null) {
     const fields = customFields || [
       'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
       'state', 'paused', 'total_size', 'progress', 'tracker_host',
@@ -125,9 +124,8 @@ export function createDelugeClient({ host, port, password }) {
       'save_path', 'download_location'
     ];
 
-    const result = await rpc('core.get_torrents_status', [filterDict, fields]);
+    const result = await rpc('core.get_torrents_status', [{}, fields]);
 
-    // Convert the hash-keyed object to an array
     const torrents = [];
     for (const [hash, data] of Object.entries(result || {})) {
       torrents.push({
@@ -153,10 +151,62 @@ export function createDelugeClient({ host, port, password }) {
   }
 
   /**
-   * Get all torrents.
+   * Get torrents matching any of the specified labels.
+   * If labels is empty or null, returns all torrents.
    */
-  async function getAllTorrents(customFields = null) {
-    return await getTorrentsByLabel(null, customFields);
+  async function getTorrentsByLabels(labels, customFields = null) {
+    // 1. Fetch only hash and label for all torrents (extremely fast and lightweight)
+    const allTorrentsSummary = await getAllTorrents(['hash', 'label']);
+    
+    // 2. Filter in memory
+    const targetHashes = allTorrentsSummary
+      .filter(t => !labels || labels.includes(t.label))
+      .map(t => t.hash);
+      
+    if (targetHashes.length === 0) {
+      return [];
+    }
+    
+    // 3. Fetch detailed fields only for the target hashes
+    const filterDict = { id: targetHashes };
+    const fields = customFields || [
+      'name', 'hash', 'label', 'ratio', 'seeding_time', 'time_added',
+      'state', 'paused', 'total_size', 'progress', 'tracker_host',
+      'download_payload_rate', 'upload_payload_rate',
+      'save_path', 'download_location'
+    ];
+
+    const result = await rpc('core.get_torrents_status', [filterDict, fields]);
+
+    const torrents = [];
+    for (const [hash, data] of Object.entries(result || {})) {
+      torrents.push({
+        hash,
+        name: data.name,
+        label: data.label !== undefined ? data.label : '',
+        ratio: data.ratio,
+        seedingTime: data.seeding_time,
+        timeAdded: data.time_added,
+        state: data.state,
+        paused: data.paused,
+        totalSize: data.total_size,
+        progress: data.progress,
+        trackerHost: data.tracker_host,
+        downloadSpeed: data.download_payload_rate,
+        uploadSpeed: data.upload_payload_rate,
+        files: data.files || [],
+        savePath: data.download_location || data.save_path || '',
+      });
+    }
+
+    return torrents;
+  }
+
+  /**
+   * Get all torrents with a specific label.
+   */
+  async function getTorrentsByLabel(label, customFields = null) {
+    return await getTorrentsByLabels(label ? [label] : null, customFields);
   }
 
   /**
@@ -231,6 +281,7 @@ export function createDelugeClient({ host, port, password }) {
     connect,
     testConnection,
     getTorrentsByLabel,
+    getTorrentsByLabels,
     getAllTorrents,
     getTorrentDetails,
     setTorrentLabel,
