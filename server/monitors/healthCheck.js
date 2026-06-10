@@ -6,7 +6,7 @@
  */
 
 import cron from 'node-cron';
-import { getSetting } from '../db/database.js';
+import { getSetting, insertEventLog } from '../db/database.js';
 import { decrypt } from '../crypto/encryption.js';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
@@ -63,6 +63,7 @@ export async function runHealthCheck() {
       if (alertState.deluge.down) {
         recovered.push('Deluge');
         alertState.deluge.down = false;
+        insertEventLog(null, 'info', 'health', 'Deluge connection recovered');
       }
     } else {
       currentStatus.deluge = { connected: false, error: 'Not configured', lastCheck: now };
@@ -72,6 +73,7 @@ export async function runHealthCheck() {
     if (!alertState.deluge.down) {
       newlyDown.push({ service: 'Deluge', error: err.message });
       alertState.deluge.down = true;
+      insertEventLog(null, 'error', 'health', `Deluge went down: ${err.message}`);
     }
   }
 
@@ -93,6 +95,7 @@ export async function runHealthCheck() {
       if (alertState.radarr.down) {
         recovered.push('Radarr');
         alertState.radarr.down = false;
+        insertEventLog(null, 'info', 'health', 'Radarr connection recovered');
       }
     } else {
       currentStatus.radarr = { connected: false, error: 'Not configured', lastCheck: now };
@@ -102,6 +105,7 @@ export async function runHealthCheck() {
     if (!alertState.radarr.down) {
       newlyDown.push({ service: 'Radarr', error: err.message });
       alertState.radarr.down = true;
+      insertEventLog(null, 'error', 'health', `Radarr went down: ${err.message}`);
     }
   }
 
@@ -123,6 +127,7 @@ export async function runHealthCheck() {
       if (alertState.sonarr.down) {
         recovered.push('Sonarr');
         alertState.sonarr.down = false;
+        insertEventLog(null, 'info', 'health', 'Sonarr connection recovered');
       }
     } else {
       currentStatus.sonarr = { connected: false, error: 'Not configured', lastCheck: now };
@@ -132,6 +137,7 @@ export async function runHealthCheck() {
     if (!alertState.sonarr.down) {
       newlyDown.push({ service: 'Sonarr', error: err.message });
       alertState.sonarr.down = true;
+      insertEventLog(null, 'error', 'health', `Sonarr went down: ${err.message}`);
     }
   }
 

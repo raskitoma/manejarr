@@ -9,7 +9,7 @@
  */
 
 import cron from 'node-cron';
-import { getDb, saveDatabase } from './database.js';
+import { getDb, saveDatabase, insertEventLog } from './database.js';
 
 /**
  * Run the log retention/compaction process.
@@ -53,6 +53,7 @@ export function runLogRetention() {
     console.log('[RETENTION] Log retention completed');
   } catch (err) {
     console.error('[RETENTION] Log retention failed:', err.message);
+    insertEventLog(null, 'error', 'system', `Log retention failed: ${err.message}`, { stack: err.stack });
   }
 }
 
@@ -70,6 +71,7 @@ export function clearAllLogs() {
     console.log('[RETENTION] All logs cleared');
   } catch (err) {
     console.error('[RETENTION] Failed to clear logs:', err.message);
+    insertEventLog(null, 'error', 'system', `Failed to clear logs: ${err.message}`, { stack: err.stack });
   }
 }
 

@@ -183,11 +183,16 @@ export function getRunLog(id) {
 // ── Event log helpers ──
 
 export function insertEventLog(runId, level, category, message, metadata = null) {
-  db.run(
-    'INSERT INTO event_logs (run_id, level, category, message, metadata) VALUES (?, ?, ?, ?, ?)',
-    [runId, level, category, message, metadata ? JSON.stringify(metadata) : null]
-  );
-  saveDatabase();
+  if (!db) return;
+  try {
+    db.run(
+      'INSERT INTO event_logs (run_id, level, category, message, metadata) VALUES (?, ?, ?, ?, ?)',
+      [runId, level, category, message, metadata ? JSON.stringify(metadata) : null]
+    );
+    saveDatabase();
+  } catch (err) {
+    // Avoid crashing if database write fails
+  }
 }
 
 export function getEventLogs({ page = 1, pageSize = 50, level, category, runId, startDate, endDate } = {}) {

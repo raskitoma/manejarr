@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { updateTorrentMetadata, deleteTorrentMetadata, clearAllTorrentMetadata, getAllTorrentMetadata, getSetting } from '../db/database.js';
+import { updateTorrentMetadata, deleteTorrentMetadata, clearAllTorrentMetadata, getAllTorrentMetadata, getSetting, insertEventLog } from '../db/database.js';
 import { runFull, getRunStatus } from '../engine/orchestrator.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
@@ -67,6 +67,7 @@ torrentsRouter.get('/search', async (req, res) => {
     res.json({ results: results.slice(0, 30) });
   } catch (err) {
     console.error('[SEARCH] Error:', err.message);
+    insertEventLog(null, 'error', 'torrents', `Torrent search error: ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: err.message });
   }
 });
@@ -491,6 +492,7 @@ torrentsRouter.post('/:hash/rematch', async (req, res) => {
     });
   } catch (err) {
     console.error('[REMATCH] Error:', err.message);
+    insertEventLog(null, 'error', 'torrents', `Single torrent rematch error: ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: err.message });
   }
 });

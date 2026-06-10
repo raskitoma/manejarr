@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
-import { getSetting, getRunLogs, getAllTorrentMetadata } from '../db/database.js';
+import { getSetting, getRunLogs, getAllTorrentMetadata, insertEventLog } from '../db/database.js';
 import { decrypt } from '../crypto/encryption.js';
 import { getRunStatus } from '../engine/orchestrator.js';
 import { getConnectionStatus } from '../monitors/healthCheck.js';
@@ -74,6 +74,7 @@ router.get('/', async (req, res) => {
         });
       } catch (err) {
         console.error('[DASHBOARD] Failed to parse last run summary:', err.message);
+        insertEventLog(null, 'warn', 'dashboard', `Failed to parse last run summary: ${err.message}`);
       }
     }
     
@@ -126,6 +127,7 @@ router.get('/', async (req, res) => {
     });
   } catch (err) {
     console.error('[DASHBOARD] Error:', err.message);
+    insertEventLog(null, 'error', 'dashboard', `Dashboard error: ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: err.message });
   }
 });
@@ -200,6 +202,7 @@ router.get('/poster', async (req, res) => {
     return res.status(400).json({ error: 'Invalid manager' });
   } catch (err) {
     console.error('[POSTER] Error:', err.message);
+    insertEventLog(null, 'error', 'dashboard', `Poster fetch error: ${err.message}`, { stack: err.stack });
     res.status(500).send('Internal Server Error');
   }
 });
@@ -254,6 +257,7 @@ router.get('/proxy-image', async (req, res) => {
 
   } catch (err) {
     console.error('[PROXY] Error:', err.message);
+    insertEventLog(null, 'error', 'dashboard', `Proxy image error: ${err.message}`, { stack: err.stack });
     res.status(500).send('Internal Server Error');
   }
 });

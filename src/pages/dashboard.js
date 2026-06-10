@@ -645,6 +645,66 @@ async function loadDashboardData() {
   } catch (err) {
     if (err.message !== 'Authentication required') {
       showToast('Failed to load dashboard data', 'error');
+
+      // Update overview subtitle with the error message
+      const subEl = document.getElementById('torrent-overview-sub');
+      if (subEl) {
+        subEl.innerHTML = `<span class="text-error" style="color: var(--status-error); font-weight: 500;">Connection Error: ${err.message || 'Failed to communicate with the server'}</span>`;
+      }
+
+      // Display an interactive error state inside the torrent card table body
+      const tbody = document.getElementById('torrent-table-body');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr><td colspan="9">
+            <div class="empty-state" style="padding: var(--space-2xl) var(--space-md);">
+              <div class="empty-state-icon" style="color: var(--status-error); filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.2));">⚠️</div>
+              <div class="empty-state-title">Failed to load dashboard data</div>
+              <div class="empty-state-text" style="max-width: 450px; margin: 0 auto var(--space-lg); font-size: 0.9rem;">
+                ${err.message || 'An unexpected error occurred while fetching dashboard statistics.'}
+              </div>
+              <button class="btn btn-primary" id="dashboard-retry-btn" style="min-width: 120px;">
+                🔄 Try Again
+              </button>
+            </div>
+          </td></tr>
+        `;
+
+        // Attach retry behavior
+        document.getElementById('dashboard-retry-btn')?.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner"></span> Retrying...';
+          tbody.innerHTML = `
+            <tr><td colspan="9" class="text-center text-muted" style="padding: var(--space-2xl);">
+              <div class="spinner-lg" style="margin: 0 auto var(--space-md);"></div>
+              Connecting…
+            </td></tr>
+          `;
+          await loadDashboardData();
+        });
+      }
+
+      // Update overview count
+      const countEl = document.getElementById('torrent-overview-count');
+      if (countEl) countEl.textContent = '—';
+
+      // Update stats grid to show error card
+      const grid = document.getElementById('stats-grid');
+      if (grid) {
+        grid.innerHTML = `
+          <div class="stat-card" style="border: 1px solid rgba(244, 63, 94, 0.25); background: linear-gradient(135deg, rgba(244, 63, 94, 0.05), rgba(244, 63, 94, 0.02));">
+            <div class="stat-card-icon" style="background: rgba(244, 63, 94, 0.1); color: var(--status-error);">⚠️</div>
+            <div class="stat-card-body">
+              <div class="stat-card-value text-error" style="color: var(--status-error);">Offline</div>
+              <div class="stat-card-label">Deluge Service Connection</div>
+            </div>
+          </div>
+        `;
+      }
+      
+      // Ensure action buttons are properly synchronized/disabled
+      syncActionButtons({ running: false }, false);
     }
   }
 }

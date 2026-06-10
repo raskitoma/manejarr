@@ -7,7 +7,7 @@
  */
 
 import cron from 'node-cron';
-import { getSchedules } from '../db/database.js';
+import { getSchedules, insertEventLog } from '../db/database.js';
 import { runFull } from '../engine/orchestrator.js';
 import { runMaintenance } from '../engine/maintenance.js';
 
@@ -39,6 +39,7 @@ export function addCronJob(scheduleId, cronExpr, taskType = 'run') {
   // Validate cron expression
   if (!cron.validate(cronExpr)) {
     console.error(`[SCHEDULER] Invalid cron expression for schedule ${scheduleId}: ${cronExpr}`);
+    insertEventLog(null, 'error', 'scheduler', `Invalid cron expression for schedule ${scheduleId}: ${cronExpr}`);
     return false;
   }
 
@@ -53,6 +54,7 @@ export function addCronJob(scheduleId, cronExpr, taskType = 'run') {
       }
     } catch (err) {
       console.error(`[SCHEDULER] Scheduled task "${taskType}" failed:`, err.message);
+      insertEventLog(null, 'error', 'scheduler', `Scheduled task "${taskType}" failed: ${err.message}`, { stack: err.stack });
     }
   }, {
     timezone: process.env.TZ || 'UTC',

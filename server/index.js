@@ -1,4 +1,24 @@
 import 'dotenv/config';
+
+// ── Global Console Log overrides for Docker logs timestamping ──
+const originalLog = console.log;
+const originalWarn = console.warn;
+const originalError = console.error;
+
+function formatLog(args) {
+  const timestamp = new Date().toISOString();
+  if (args.length > 0 && typeof args[0] === 'string') {
+    if (/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(args[0])) {
+      return args;
+    }
+    return [`[${timestamp}] ${args[0]}`, ...args.slice(1)];
+  }
+  return [`[${timestamp}]`, ...args];
+}
+
+console.log = (...args) => originalLog(...formatLog(args));
+console.warn = (...args) => originalWarn(...formatLog(args));
+console.error = (...args) => originalError(...formatLog(args));
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
