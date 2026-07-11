@@ -2,7 +2,7 @@
 
 > **Automated Torrent Orchestration for the Modern Media Lab.**
 
-Manejarr is a high-performance, containerized service-to-service orchestration layer designed to bridge the gap between **Deluge** and the **\*arr suite** (Radarr/Sonarr). It automates the entire torrent lifecycle—from quality verification to retention-based cleanup—ensuring your library stays lean and your seeding ratios stay healthy.
+Manejarr is a high-performance, containerized service-to-service orchestration layer designed to bridge the gap between **Deluge** and the **\*arr suite** (Radarr, Sonarr, and optionally Lidarr). It automates the entire torrent lifecycle—from quality verification to retention-based cleanup—ensuring your library stays lean and your seeding ratios stay healthy.
 
 ---
 
@@ -28,6 +28,7 @@ Manejarr is a high-performance, containerized service-to-service orchestration l
 - **Docker** & **Docker Compose**
 - **Deluge v2.2.0+** (Label plugin enabled)
 - **Radarr / Sonarr** (Latest stable)
+- **Lidarr** (optional — for music/album lifecycle management)
 
 ### Deploy in Seconds
 
@@ -51,19 +52,19 @@ The deployment script handles the setup interactively:
 
 ## ⚙️ Configuration & Setup
 
-1. **Service Integration**: Head to **Settings** to link your Deluge and *arr instances.
+1. **Service Integration**: Head to **Settings** to link your Deluge and *arr instances (Lidarr is optional).
 2. **Retention Rules**: Define your minimum seeding days and ratio requirements.
-3. **Labels**: Ensure Deluge has the following labels configured:
-   - `media` — Active torrents managed by *arr.
-   - `ignore` — Successfully imported, currently seeding.
-   - `fordeletion` — Retention met, awaiting manual/auto cleanup.
+3. **Labels**: Manejarr recognizes these Deluge labels:
+   - **Working labels** — freshly downloaded, awaiting verification. Manejarr matches these against *arr history regardless of the exact name: the legacy shared `media`, or per-app `radarr` / `sonarr` / `lidarr` labels if you split your download-client categories. Any label that isn't `ignore`/`fordeletion` is treated as a working torrent.
+   - `ignore` — Successfully imported, currently seeding (Manejarr sets this after verification).
+   - `fordeletion` — Retention met, paused, awaiting manual/auto cleanup (Manejarr sets this in Phase 2).
 
 ---
 
 ## 🛠️ How It Works
 
 ### Phase 1: The Handshake
-Manejarr identifies torrents with the `media` label, verifies their hash against Radarr/Sonarr history, and confirms the file meets your quality cutoff. Once verified, it unmonitors the item in the *arr suite and relabels it to `ignore`.
+Manejarr scans every working torrent (anything not already `ignore`/`fordeletion`), verifies its hash against Radarr / Sonarr / Lidarr history, and confirms the file meets your quality cutoff. Ownership is decided by which *arr actually grabbed the download — not by the Deluge label — so a shared `media` label or split `radarr`/`sonarr`/`lidarr` labels both work. Once verified, it unmonitors the item in the *arr suite and relabels it to `ignore`.
 
 ### Phase 2: The Harvest
 It monitors `ignore` torrents against your retention rules. Once the time or ratio threshold is crossed, the torrent is paused and relabeled to `fordeletion`.

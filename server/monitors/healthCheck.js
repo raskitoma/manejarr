@@ -11,6 +11,7 @@ import { decrypt } from '../crypto/encryption.js';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
+import { createLidarrClient } from '../clients/lidarr.js';
 import { notifyRunComplete } from '../notifications/notifier.js';
 
 // Track previous alert state to avoid repeated alerts
@@ -18,6 +19,7 @@ const alertState = {
   deluge: { down: false, lastCheck: null },
   radarr: { down: false, lastCheck: null },
   sonarr: { down: false, lastCheck: null },
+  lidarr: { down: false, lastCheck: null },
 };
 
 // Current connection status (readable by dashboard)
@@ -25,6 +27,7 @@ let currentStatus = {
   deluge: { connected: false, error: null, version: null, lastCheck: null, labels: [] },
   radarr: { connected: false, error: null, version: null, lastCheck: null },
   sonarr: { connected: false, error: null, version: null, lastCheck: null },
+  lidarr: { connected: false, error: null, version: null, lastCheck: null },
 };
 
 /**
@@ -141,6 +144,38 @@ export async function runHealthCheck() {
     }
   }
 
+  // ── Lidarr (optional) ──
+  try {
+    const host = getSetting('lidarr_host');
+    const port = getSetting('lidarr_port');
+    const apiKey = getSetting('lidarr_api_key');
+
+    if (host && apiKey) {
+      const client = createLidarrClient({
+        host,
+        port: parseInt(port, 10) || 8686,
+        apiKey: decrypt(apiKey),
+      });
+      const info = await client.testConnection();
+      currentStatus.lidarr = { connected: true, version: info.version, error: null, lastCheck: now };
+
+      if (alertState.lidarr.down) {
+        recovered.push('Lidarr');
+        alertState.lidarr.down = false;
+        insertEventLog(null, 'info', 'health', 'Lidarr connection recovered');
+      }
+    } else {
+      currentStatus.lidarr = { connected: false, error: 'Not configured', lastCheck: now };
+    }
+  } catch (err) {
+    currentStatus.lidarr = { connected: false, error: err.message, lastCheck: now };
+    if (!alertState.lidarr.down) {
+      newlyDown.push({ service: 'Lidarr', error: err.message });
+      alertState.lidarr.down = true;
+      insertEventLog(null, 'error', 'health', `Lidarr went down: ${err.message}`);
+    }
+  }
+
   // Send alert notification if any service just went down
   if (newlyDown.length > 0) {
     const alertSummary = {
@@ -166,7 +201,7 @@ export async function runHealthCheck() {
     console.log(`[HEALTH] Services recovered: ${recovered.join(', ')}`);
   }
 
-  console.log(`[HEALTH] Check complete: Deluge=${currentStatus.deluge.connected}, Radarr=${currentStatus.radarr.connected}, Sonarr=${currentStatus.sonarr.connected}`);
+  console.log(`[HEALTH] Check complete: Deluge=${currentStatus.deluge.connected}, Radarr=${currentStatus.radarr.connected}, Sonarr=${currentStatus.sonarr.connected}, Lidarr=${currentStatus.lidarr.connected}`);
 }
 
 /**

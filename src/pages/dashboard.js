@@ -162,6 +162,7 @@ export async function renderDashboard() {
             { value: 'media',      label: t('media'),       icon: '📥' },
             { value: 'radarr',     label: 'Radarr',         icon: '🎬' },
             { value: 'sonarr',     label: 'Sonarr',         icon: '📺' },
+            { value: 'lidarr',     label: 'Lidarr',         icon: '🎵' },
             { value: 'ignore',     label: t('ignore'),      icon: '⏳' },
             { value: 'fordeletion',label: t('for_deletion'),icon: '🗑️' },
           ],
@@ -223,6 +224,7 @@ function initDashboardEvents() {
         { value: 'media',      label: t('media') },
         { value: 'radarr',     label: 'Radarr' },
         { value: 'sonarr',     label: 'Sonarr' },
+        { value: 'lidarr',     label: 'Lidarr' },
         { value: 'ignore',     label: t('ignore') },
         { value: 'fordeletion',label: t('for_deletion') },
       ].find(o => o.value === value);

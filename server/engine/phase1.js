@@ -16,7 +16,7 @@
 
 import { meetsQualityCutoff, getQualityName } from './quality.js';
 import { extractSeriesBase, buildSeriesBaseMap, isSeriesPattern, isMoviePattern } from '../utils/seriesParser.js';
-import { buildRadarrMetadata, buildSonarrMetadata } from '../utils/metadataBuilders.js';
+import { buildRadarrMetadata, buildSonarrMetadata, buildLidarrMetadata } from '../utils/metadataBuilders.js';
 
 /**
  * Execute Phase 1.
@@ -27,7 +27,7 @@ import { buildRadarrMetadata, buildSonarrMetadata } from '../utils/metadataBuild
  * @returns {Object} - Summary of actions taken
  */
 export async function executePhase1(clients, settings, options = {}, log) {
-  const { deluge, radarr, sonarr } = clients;
+  const { deluge, radarr, sonarr, lidarr } = clients;
   const { minSeedingTime = 259200, minRatio = 1.1 } = settings || {};
   const { dryRun = false, existingMetadata = {} } = options;
 
@@ -80,9 +80,10 @@ export async function executePhase1(clients, settings, options = {}, log) {
   // or a successful filename parse. Map grows during the run as new matches land.
   const seriesBaseMap = buildSeriesBaseMap(torrents, existingMetadata);
 
-  // Pre-fetch quality profiles for both services
+  // Pre-fetch quality profiles for each configured service
   let radarrProfiles = {};
   let sonarrProfiles = {};
+  let lidarrProfiles = {};
 
   try {
     const profiles = await radarr.getQualityProfiles();
@@ -96,6 +97,15 @@ export async function executePhase1(clients, settings, options = {}, log) {
     for (const p of profiles) sonarrProfiles[p.id] = p;
   } catch (err) {
     log('warn', 'sonarr', `Could not fetch quality profiles: ${err.message}`);
+  }
+
+  if (lidarr) {
+    try {
+      const profiles = await lidarr.getQualityProfiles();
+      for (const p of profiles) lidarrProfiles[p.id] = p;
+    } catch (err) {
+      log('warn', 'lidarr', `Could not fetch quality profiles: ${err.message}`);
+    }
   }
 
   // 2. Process each torrent
@@ -169,6 +179,20 @@ export async function executePhase1(clients, settings, options = {}, log) {
             }
           }
         }
+        // Lidarr owns what Radarr/Sonarr don't (music). Try its authoritative
+        // hash/history match before the greedy filename-parse fallbacks below so
+        // a music grab can't be mis-parsed onto a movie/series. No pattern gate —
+        // music release names have no reliable movie/series shape.
+        if (!manager && lidarr) {
+          const lidarrMatch = await lidarr.getAlbumsByHash(torrent.hash, torrent.name);
+          if (lidarrMatch) {
+            manager = 'lidarr';
+            torrent._match = lidarrMatch;
+            if (lidarrMatch.source === 'history-name') {
+              log('info', 'lidarr', `History sourceTitle fallback matched "${torrent.name}" to artist ID ${lidarrMatch.artistId}`);
+            }
+          }
+        }
 
         // Path-based fallback: scan history for a record whose dropped/imported
         // path includes this torrent's name.
@@ -189,6 +213,16 @@ export async function executePhase1(clients, settings, options = {}, log) {
               manager = 'sonarr';
               torrent._match = pathMatch;
               log('info', 'sonarr', `History path fallback matched "${torrent.name}" to series ID ${pathMatch.seriesId}`);
+            }
+          } catch (e) { /* path lookup is best-effort */ }
+        }
+        if (!manager && lidarr) {
+          try {
+            const pathMatch = await lidarr.findAlbumsByPath(torrent.name);
+            if (pathMatch?.artistId) {
+              manager = 'lidarr';
+              torrent._match = pathMatch;
+              log('info', 'lidarr', `History path fallback matched "${torrent.name}" to artist ID ${pathMatch.artistId}`);
             }
           } catch (e) { /* path lookup is best-effort */ }
         }
@@ -449,14 +483,114 @@ export async function executePhase1(clients, settings, options = {}, log) {
         }
       }
 
+      // ── LIDARR BLOCK ──
+      // Fallthrough for music torrents Radarr/Sonarr don't own. A single torrent
+      // can span multiple albums (discography), so this mirrors the Sonarr block's
+      // multi-item handling with albums in place of episodes.
+      if (manager === 'lidarr' && lidarr) {
+        const lidarrMatch = torrent._match || await lidarr.getAlbumsByHash(torrent.hash, torrent.name);
+
+        if (!lidarrMatch) {
+          log('warn', 'lidarr', `Cache mismatch or no albums found for "${torrent.name}" in Lidarr. Skipping.`);
+          summary.details.push({
+            hash: torrent.hash,
+            name: torrent.name,
+            action: 'skipped',
+            reason: 'Artist or albums not found in Lidarr',
+            manager: 'lidarr',
+          });
+          continue;
+        } else {
+          log('info', 'lidarr', `Matched torrent "${torrent.name}" to artist ID ${lidarrMatch.artistId}`);
+
+          const artist = lidarrMatch.artist || await lidarr.getArtistById(lidarrMatch.artistId);
+          const profile = lidarrProfiles[artist.qualityProfileId];
+
+          const albumIds = [];
+          let allQualityMet = true;
+          let importedCount = 0;
+
+          for (const alb of lidarrMatch.albums) {
+            if (alb.albumId) {
+              if (alb.eventType === 'downloadImported' || alb.eventType === 'trackFileImported') {
+                albumIds.push(alb.albumId);
+                importedCount++;
+              }
+
+              if (alb.quality) {
+                const qualityName = getQualityName(alb.quality);
+                if (profile) {
+                  const met = meetsQualityCutoff(alb.quality, profile);
+                  if (!met) allQualityMet = false;
+                  log('info', 'lidarr', `Album ${alb.albumId}: quality=${qualityName}, meets=${met} (event=${alb.eventType})`);
+                }
+              } else if (profile) {
+                allQualityMet = false;
+                log('warn', 'lidarr', `Album ${alb.albumId} has no quality info, assuming quality cutoff not met`);
+              }
+            }
+          }
+
+          // Multiple trackFileImported rows can reference the same album.
+          const uniqueAlbumIds = [...new Set(albumIds)];
+
+          if (importedCount > 0) {
+            // Correctly downloaded/matched: unmonitor these albums regardless of quality cutoff or current label
+            if (!dryRun) await lidarr.setAlbumsUnmonitored(uniqueAlbumIds);
+            summary.unmonitored++;
+            log('info', 'lidarr', `${dryRun ? '[DRY RUN] Would ensure unmonitored' : 'Ensuring unmonitored'} ${uniqueAlbumIds.length} album(s) of "${artist.artistName}"`);
+
+            // Only relabel to 'ignore' if ALL albums meet quality cutoff OR limit is met
+            if ((allQualityMet && profile) || limitMet) {
+              summary.matched++;
+
+              if (torrent._target === 'process') {
+                if (!dryRun) await deluge.setTorrentLabel(torrent.hash, 'ignore');
+                summary.relabeled++;
+                log('info', 'deluge', `${dryRun ? '[DRY RUN] Would relabel' : 'Relabeled'} "${torrent.name}" → ignore (${(allQualityMet && profile) ? 'Quality met' : 'Limit reached'})`);
+              } else {
+                log('info', 'lidarr', `Metadata gathered for artist: ${artist.artistName}`);
+              }
+            } else if (profile) {
+              log('info', 'lidarr', `Quality cutoff NOT met for some albums and limit NOT reached for "${artist.artistName}". Keeping in working label.`);
+            }
+
+            summary.details.push({
+              hash: torrent.hash,
+              name: torrent.name,
+              action: (torrent._target === 'process' && ((allQualityMet && profile) || limitMet)) ? (dryRun ? 'would_process' : 'processed') : (torrent._target === 'process' ? 'unmonitored_only' : 'metadata_only'),
+              service: 'lidarr',
+              manager: 'lidarr',
+              title: artist.artistName,
+              albums: uniqueAlbumIds.length,
+              allQualityMet,
+              limitMet,
+              metadata: { ...buildLidarrMetadata(artist), source: torrent._match?.source || 'hash' },
+            });
+            continue;
+          } else {
+            log('warn', 'lidarr', `Artist "${artist.artistName}" has no imported files for this torrent yet, skipping`);
+            summary.details.push({
+              hash: torrent.hash,
+              name: torrent.name,
+              action: 'skipped',
+              reason: 'No imported files in Lidarr',
+              manager: 'lidarr',
+              metadata: { ...buildLidarrMetadata(artist), source: torrent._match?.source || 'hash' },
+            });
+            continue;
+          }
+        }
+      }
+
       // 2c. No match found
       summary.unmatched++;
-      log('warn', 'engine', `Torrent "${torrent.name}" (${torrent.hash}) not found in Radarr or Sonarr`);
+      log('warn', 'engine', `Torrent "${torrent.name}" (${torrent.hash}) not found in Radarr, Sonarr or Lidarr`);
       summary.details.push({
         hash: torrent.hash,
         name: torrent.name,
         action: 'unmatched',
-        reason: 'Not found in Radarr or Sonarr history',
+        reason: 'Not found in Radarr, Sonarr or Lidarr history',
       });
 
     } catch (err) {

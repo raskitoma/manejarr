@@ -55,6 +55,24 @@ export function buildSonarrMetadata(series) {
   };
 }
 
+export function buildLidarrMetadata(artist) {
+  if (!artist) return null;
+  const mbId = artist.foreignArtistId || null;
+
+  return {
+    title: artist.artistName,
+    year: null,
+    images: artist.images || [],
+    // MusicBrainz is Lidarr's external metadata source.
+    infoUrl: mbId ? `https://musicbrainz.org/artist/${mbId}` : null,
+    // Lidarr's web UI routes artists by titleSlug; fall back to the numeric id.
+    managerUrl: artist.titleSlug ? `/artist/${artist.titleSlug}` : (artist.id ? `/artist/${artist.id}` : null),
+    id: artist.id,
+    // External id persisted so the hover card can fall back to a MusicBrainz page.
+    mbId,
+  };
+}
+
 /**
  * Normalize a torrent / release title for case-insensitive comparison
  * across Sonarr/Radarr history sourceTitle fields.
