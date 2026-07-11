@@ -9,6 +9,13 @@ import { getConnectionStatus } from '../monitors/healthCheck.js';
 
 const router = Router();
 
+// Working (pre-processing) labels: torrents Deluge hands off with an *arr
+// download-client label, before Phase 1 relabels them to 'ignore'. Historically
+// just 'media' (shared by Radarr+Sonarr); the per-app split adds 'radarr'/'sonarr'.
+// All are surfaced together as the dashboard's "media"/working bucket so split-
+// labeled torrents stay visible before Phase 1 processes them.
+const WORKING_LABELS = ['media', 'radarr', 'sonarr'];
+
 /**
  * GET /api/dashboard
  * Returns aggregated dashboard data: torrents, stats, connections.
@@ -37,8 +44,9 @@ router.get('/', async (req, res) => {
     await deluge.connect();
 
     // Fetch all relevant torrents in one optimized step to prevent massive payload transmission and timeouts on Deluge WebUI
-    const delugeTorrents = await deluge.getTorrentsByLabels(['media', 'ignore', 'fordeletion']);
-    const mediaTorrents = delugeTorrents.filter(t => t.label === 'media');
+    const delugeTorrents = await deluge.getTorrentsByLabels([...WORKING_LABELS, 'ignore', 'fordeletion']);
+    // "media" bucket = any working label (media/radarr/sonarr), i.e. matched-but-not-yet-processed torrents
+    const mediaTorrents = delugeTorrents.filter(t => WORKING_LABELS.includes(t.label));
     const ignoreTorrents = delugeTorrents.filter(t => t.label === 'ignore');
     const forDeletionTorrents = delugeTorrents.filter(t => t.label === 'fordeletion');
 

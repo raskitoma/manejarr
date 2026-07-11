@@ -1,13 +1,16 @@
 /**
  * Phase 1: Verification & Monitoring
  *
- * 1. Fetch all torrents labeled 'media' from Deluge
- * 2. Match each torrent against Radarr/Sonarr history by hash
+ * 1. Fetch ALL torrents from Deluge, then process every one whose label is not
+ *    'ignore'/'fordeletion' (i.e. any working label — 'media', or 'radarr'/'sonarr'
+ *    after the per-app label split). Ownership is decided by matching against each
+ *    *arr's own history, NOT by the Deluge label.
+ * 2. Match each torrent against Radarr/Sonarr history by hash (then sourceTitle/path)
  * 3. Verify quality meets the requested quality profile cutoff
  * 4. If matched & quality OK:
  *    - Radarr: Set movie to unmonitored
  *    - Sonarr: Set episode(s) to unmonitored (not the series)
- *    - Deluge: Relabel from 'media' to 'ignore'
+ *    - Deluge: Relabel from its working label to 'ignore'
  * 5. Torrents continue seeding after relabeling
  */
 
@@ -47,9 +50,9 @@ export async function executePhase1(clients, settings, options = {}, log) {
     // Query only the fields necessary for validation & matching to optimize throughput over VPN
     const allTorrents = await deluge.getAllTorrents(['name', 'hash', 'label', 'ratio', 'seeding_time']);
     
-    // Categorize torrents for processing
-    // - 'media' or other labels: target for processing/relabeling
-    // - 'ignore' or 'fordeletion': only gather metadata
+    // Categorize torrents for processing (denylist, not an allowlist on 'media'):
+    // - 'ignore' or 'fordeletion': already processed → only gather metadata
+    // - any other label (media/radarr/sonarr/…): working torrent → target for processing/relabeling
     torrents = allTorrents.map(t => {
       if (t.label === 'ignore' || t.label === 'fordeletion') {
         t._target = 'metadata_only';
@@ -67,7 +70,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
   }
 
   if (torrents.length === 0) {
-    log('info', 'engine', 'No torrents labeled media, ignore or fordeletion. Phase 1 complete.');
+    log('info', 'engine', 'No torrents found in Deluge. Phase 1 complete.');
     return summary;
   }
 
@@ -305,7 +308,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
                 log('info', 'radarr', `Metadata gathered for movie: ${movie.title}`);
               }
             } else {
-              log('info', 'radarr', `Quality cutoff NOT met and limit NOT reached for "${movie.title}". Keeping in media label for further seeding.`);
+              log('info', 'radarr', `Quality cutoff NOT met and limit NOT reached for "${movie.title}". Keeping in working label for further seeding.`);
             }
 
             summary.details.push({
@@ -415,7 +418,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
                 log('info', 'sonarr', `Metadata gathered for series: ${series.title}`);
               }
             } else if (profile) {
-               log('info', 'sonarr', `Quality cutoff NOT met for some episodes and limit NOT reached for "${series.title}". Keeping in media label.`);
+               log('info', 'sonarr', `Quality cutoff NOT met for some episodes and limit NOT reached for "${series.title}". Keeping in working label.`);
             }
 
             summary.details.push({

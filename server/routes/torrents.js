@@ -209,8 +209,9 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
               // Get existing metadata to skip already-matched torrents
               const existingMetadata = getAllTorrentMetadata();
               
-              // Only query other unmatched torrents (which would be labeled 'media') to keep payloads small
-              const candidateTorrents = await deluge.getTorrentsByLabel('media', ['name', 'hash', 'label']);
+              // Only query other unmatched torrents (which carry a working label —
+              // 'media', or 'radarr'/'sonarr' after the per-app label split) to keep payloads small
+              const candidateTorrents = await deluge.getTorrentsByLabels(['media', 'radarr', 'sonarr'], ['name', 'hash', 'label']);
               
               for (const torrent of candidateTorrents) {
                 // Skip the torrent we just matched and already-matched ones
