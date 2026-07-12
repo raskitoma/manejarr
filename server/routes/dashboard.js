@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
+import { createLidarrClient } from '../clients/lidarr.js';
 import { getSetting, getRunLogs, getAllTorrentMetadata, insertEventLog } from '../db/database.js';
 import { decrypt } from '../crypto/encryption.js';
 import { getRunStatus } from '../engine/orchestrator.js';
@@ -89,15 +90,17 @@ router.get('/', async (req, res) => {
     // Base URLs for manager links
     const radarrBase = `http://${getSetting('radarr_host')}:${getSetting('radarr_port') || 7878}`;
     const sonarrBase = `http://${getSetting('sonarr_host')}:${getSetting('sonarr_port') || 8989}`;
+    const lidarrBase = `http://${getSetting('lidarr_host')}:${getSetting('lidarr_port') || 8686}`;
+    const baseByManager = { radarr: radarrBase, sonarr: sonarrBase, lidarr: lidarrBase };
 
     // Enrich torrents
     const enrichedTorrents = allTorrents.map(t => {
       const pm = persistentMetadata[t.hash] || {};
       const rd = recentDetails[t.hash] || {};
-      
+
       let managerUrl = null;
-      if (pm.metadata?.managerUrl) {
-        managerUrl = pm.manager === 'radarr' ? `${radarrBase}${pm.metadata.managerUrl}` : `${sonarrBase}${pm.metadata.managerUrl}`;
+      if (pm.metadata?.managerUrl && baseByManager[pm.manager]) {
+        managerUrl = `${baseByManager[pm.manager]}${pm.metadata.managerUrl}`;
       }
 
       return {
@@ -117,7 +120,8 @@ router.get('/', async (req, res) => {
     // Get connection info (minimal, for manager identification)
     const connectionInfo = {
       radarr: { active: !!getSetting('radarr_host') },
-      sonarr: { active: !!getSetting('sonarr_host') }
+      sonarr: { active: !!getSetting('sonarr_host') },
+      lidarr: { active: !!getSetting('lidarr_host') }
     };
 
     res.json({
@@ -156,7 +160,7 @@ router.get('/poster', async (req, res) => {
     if (!manager || !id) return res.status(400).json({ error: 'Missing manager or id' });
 
     const host = getSetting(`${manager}_host`);
-    const port = getSetting(`${manager}_port`) || (manager === 'radarr' ? 7878 : 8989);
+    const port = getSetting(`${manager}_port`) || (manager === 'radarr' ? 7878 : manager === 'lidarr' ? 8686 : 8989);
     const apiKey = decrypt(getSetting(`${manager}_api_key`) || '');
     if (!host || !apiKey) return res.status(404).send('Service not configured');
 
@@ -207,6 +211,29 @@ router.get('/poster', async (req, res) => {
       return res.status(404).send('No poster available');
     }
 
+    if (manager === 'lidarr') {
+      const client = createLidarrClient({ host, port, apiKey });
+      const artist = await client.getArtistById(parseInt(id, 10));
+      images = artist?.images || [];
+      const poster = images.find(i => i.coverType === 'poster') || images.find(i => i.coverType === 'fanart');
+      if (!poster) return res.status(404).send('No poster available');
+      const targetUrl = (poster.url || '').replace(/^\/api\/v1/, '');
+      if (targetUrl) {
+        try {
+          const r = await client.requestRaw(targetUrl);
+          if (r.ok) {
+            res.set('Content-Type', r.headers.get('Content-Type') || 'image/jpeg');
+            res.set('Cache-Control', 'public, max-age=86400');
+            const buf = await r.arrayBuffer();
+            return res.send(Buffer.from(buf));
+          }
+        } catch (e) { /* fall through to remoteUrl */ }
+      }
+      // Fall back to the MusicBrainz/fanart CDN remoteUrl — no API key required.
+      if (poster.remoteUrl) return res.redirect(poster.remoteUrl);
+      return res.status(404).send('No poster available');
+    }
+
     return res.status(400).json({ error: 'Invalid manager' });
   } catch (err) {
     console.error('[POSTER] Error:', err.message);
@@ -231,7 +258,7 @@ router.get('/proxy-image', async (req, res) => {
     // Build client based on manager
     let client;
     const host = getSetting(`${manager}_host`);
-    const port = getSetting(`${manager}_port`) || (manager === 'radarr' ? 7878 : 8989);
+    const port = getSetting(`${manager}_port`) || (manager === 'radarr' ? 7878 : manager === 'lidarr' ? 8686 : 8989);
     const apiKey = decrypt(getSetting(`${manager}_api_key`) || '');
 
     if (!host || !apiKey) {
@@ -242,14 +269,17 @@ router.get('/proxy-image', async (req, res) => {
       client = createRadarrClient({ host, port, apiKey });
     } else if (manager === 'sonarr') {
       client = createSonarrClient({ host, port, apiKey });
+    } else if (manager === 'lidarr') {
+      client = createLidarrClient({ host, port, apiKey });
     } else {
       return res.status(400).json({ error: 'Invalid manager' });
     }
 
     // Forward the request to the *arr instance
-    // Note: url already contains the path including api/v3/mediacover if from metadata
-    // We strip /api/v3 if it's dual-included by the client request helper
-    const targetUrl = url.replace(/^\/api\/v3/, '');
+    // Note: url already contains the path including api/vN/mediacover if from metadata
+    // We strip the /api/vN prefix if it's dual-included by the client request helper
+    // (v3 for Radarr/Sonarr, v1 for Lidarr).
+    const targetUrl = url.replace(/^\/api\/v[13]/, '');
     const response = await client.requestRaw(targetUrl);
 
     if (!response.ok) {

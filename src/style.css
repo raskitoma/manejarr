@@ -1714,6 +1714,7 @@ a.hover-card-poster.empty-poster:hover {
 /* Manager Badges */
 .badge-radarr { background: rgba(255, 165, 0, 0.15); color: #ffa500; }
 .badge-sonarr { background: rgba(0, 188, 212, 0.15); color: #00bcd4; }
+.badge-lidarr { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
 .badge-link { text-decoration: none; transition: transform 0.2s ease; display: inline-block; }
 .badge-link:hover { transform: scale(1.05); }
 
@@ -1920,6 +1921,19 @@ a.hover-card-poster.empty-poster:hover {
 .match-actions-toggle--radarr .match-actions-label,
 .match-actions-toggle--radarr .match-actions-chevron {
   color: #ffa500;
+}
+
+.match-actions-toggle--lidarr {
+  border-color: rgba(168, 85, 247, 0.45);
+  background: rgba(168, 85, 247, 0.10);
+}
+.match-actions-toggle--lidarr:hover {
+  background: rgba(168, 85, 247, 0.22);
+  border-color: rgba(168, 85, 247, 0.65);
+}
+.match-actions-toggle--lidarr .match-actions-label,
+.match-actions-toggle--lidarr .match-actions-chevron {
+  color: #a855f7;
 }
 
 .match-actions-chevron {

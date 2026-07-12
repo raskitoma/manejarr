@@ -16,6 +16,7 @@ import { runHealthCheck } from '../monitors/healthCheck.js';
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
+import { createLidarrClient } from '../clients/lidarr.js';
 import { sendTestNotification } from '../notifications/notifier.js';
 import { testTelegram } from '../notifications/telegram.js';
 import { notifyGoogleLinkStatus } from '../notifications/authEmail.js';
@@ -26,7 +27,7 @@ const router = Router();
 
 // Keys that contain sensitive data and must be encrypted
 const SENSITIVE_KEYS = [
-  'deluge_password', 'radarr_api_key', 'sonarr_api_key',
+  'deluge_password', 'radarr_api_key', 'sonarr_api_key', 'lidarr_api_key',
   'notify_email_password', 'notify_telegram_bot_token',
   'google_client_secret',
 ];
@@ -36,6 +37,7 @@ const SETTING_KEYS = [
   'deluge_host', 'deluge_port', 'deluge_password',
   'radarr_host', 'radarr_port', 'radarr_api_key',
   'sonarr_host', 'sonarr_port', 'sonarr_api_key',
+  'lidarr_host', 'lidarr_port', 'lidarr_api_key',
   'min_seeding_time', 'min_ratio',
   // Notification — Email
   'notify_email_enabled', 'notify_email_host', 'notify_email_port',
@@ -238,6 +240,15 @@ router.post('/test', async (req, res) => {
         const client = createSonarrClient({
           host: host || getSetting('sonarr_host'),
           port: parseInt(port, 10) || parseInt(getSetting('sonarr_port'), 10) || 8989,
+          apiKey: actualCredential,
+        });
+        result = await client.testConnection();
+        break;
+      }
+      case 'lidarr': {
+        const client = createLidarrClient({
+          host: host || getSetting('lidarr_host'),
+          port: parseInt(port, 10) || parseInt(getSetting('lidarr_port'), 10) || 8686,
           apiKey: actualCredential,
         });
         result = await client.testConnection();

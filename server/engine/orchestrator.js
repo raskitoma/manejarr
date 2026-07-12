@@ -8,6 +8,7 @@
 import { createDelugeClient } from '../clients/deluge.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
+import { createLidarrClient } from '../clients/lidarr.js';
 import { executePhase1 } from './phase1.js';
 import { executePhase2 } from './phase2.js';
 import { decrypt } from '../crypto/encryption.js';
@@ -54,6 +55,10 @@ function buildClients() {
   const sonarrPort = getSetting('sonarr_port');
   const sonarrApiKey = getSetting('sonarr_api_key');
 
+  const lidarrHost = getSetting('lidarr_host');
+  const lidarrPort = getSetting('lidarr_port');
+  const lidarrApiKey = getSetting('lidarr_api_key');
+
   if (!delugeHost || !delugePassword) {
     throw new Error('Deluge connection not configured. Go to Settings to configure.');
   }
@@ -80,6 +85,15 @@ function buildClients() {
       port: parseInt(sonarrPort, 10) || 8989,
       apiKey: decrypt(sonarrApiKey),
     }),
+    // Lidarr is OPTIONAL — only built when configured, so existing
+    // Radarr/Sonarr-only deployments are unaffected. phase1 guards on it.
+    lidarr: (lidarrHost && lidarrApiKey)
+      ? createLidarrClient({
+          host: lidarrHost,
+          port: parseInt(lidarrPort, 10) || 8686,
+          apiKey: decrypt(lidarrApiKey),
+        })
+      : null,
   };
 }
 

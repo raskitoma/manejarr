@@ -160,6 +160,9 @@ export async function renderDashboard() {
           options: [
             { value: '',           label: t('all_labels') },
             { value: 'media',      label: t('media'),       icon: '📥' },
+            { value: 'radarr',     label: 'Radarr',         icon: '🎬' },
+            { value: 'sonarr',     label: 'Sonarr',         icon: '📺' },
+            { value: 'lidarr',     label: 'Lidarr',         icon: '🎵' },
             { value: 'ignore',     label: t('ignore'),      icon: '⏳' },
             { value: 'fordeletion',label: t('for_deletion'),icon: '🗑️' },
           ],
@@ -219,6 +222,9 @@ function initDashboardEvents() {
       const opt = [
         { value: '',           label: t('all_labels') },
         { value: 'media',      label: t('media') },
+        { value: 'radarr',     label: 'Radarr' },
+        { value: 'sonarr',     label: 'Sonarr' },
+        { value: 'lidarr',     label: 'Lidarr' },
         { value: 'ignore',     label: t('ignore') },
         { value: 'fordeletion',label: t('for_deletion') },
       ].find(o => o.value === value);
@@ -612,7 +618,7 @@ async function loadDashboardData() {
           <div class="stat-card-icon" style="background: var(--label-media-bg); color: var(--label-media);">📥</div>
           <div class="stat-card-body">
             <div class="stat-card-value">${data.stats?.mediaCount ?? 0}</div>
-            <div class="stat-card-label">Media</div>
+            <div class="stat-card-label">Downloaded</div>
           </div>
         </div>
         <div class="stat-card">

@@ -115,6 +115,36 @@ export async function renderSettings() {
             </div>
           </div>
         </div>
+
+        <!-- Lidarr -->
+        <div class="service-section">
+          <div class="service-header">
+            <div class="service-title">
+              <div class="service-icon" style="background: rgba(168, 85, 247, 0.15); color: #a855f7;">🎵</div>
+              <span>Lidarr</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="form-row-3">
+              <div class="form-group">
+                <label class="form-label" for="lidarr_host">${t('host')}</label>
+                <input type="text" id="lidarr_host" class="form-input" placeholder="192.168.1.100" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="lidarr_port">${t('port')}</label>
+                <input type="number" id="lidarr_port" class="form-input" placeholder="8686" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="lidarr_api_key">${t('api_key')}</label>
+                <input type="password" id="lidarr_api_key" class="form-input form-input-mono" placeholder="${t('api_key')}" />
+              </div>
+            </div>
+            <div class="flex items-center justify-between mt-md">
+              <div id="lidarr-test-result"></div>
+              <button class="btn btn-sm btn-secondary" id="test-lidarr-btn">${t('save_test')}</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Rules Tab -->
@@ -462,6 +492,7 @@ export async function renderSettings() {
   document.getElementById('test-deluge-btn')?.addEventListener('click', () => saveAndTestService('deluge'));
   document.getElementById('test-radarr-btn')?.addEventListener('click', () => saveAndTestService('radarr'));
   document.getElementById('test-sonarr-btn')?.addEventListener('click', () => saveAndTestService('sonarr'));
+  document.getElementById('test-lidarr-btn')?.addEventListener('click', () => saveAndTestService('lidarr'));
 
   document.getElementById('save-rules-btn')?.addEventListener('click', () => saveSettings('Rules saved successfully'));
   document.getElementById('save-env-btn')?.addEventListener('click', () => saveSettings('Environment settings saved'));
@@ -768,6 +799,10 @@ async function loadSettings() {
     document.getElementById('sonarr_port').value = settings.sonarr_port || '';
     document.getElementById('sonarr_api_key').value = settings.sonarr_api_key || '';
 
+    document.getElementById('lidarr_host').value = settings.lidarr_host || '';
+    document.getElementById('lidarr_port').value = settings.lidarr_port || '';
+    document.getElementById('lidarr_api_key').value = settings.lidarr_api_key || '';
+
     // Convert seconds to days for display
     const seedingTimeSec = parseInt(settings.min_seeding_time, 10) || 259200;
     document.getElementById('min_seeding_days').value = (seedingTimeSec / 86400).toString();
@@ -950,6 +985,7 @@ async function saveSettings(successMessage) {
       'deluge_host', 'deluge_port', 'deluge_password',
       'radarr_host', 'radarr_port', 'radarr_api_key',
       'sonarr_host', 'sonarr_port', 'sonarr_api_key',
+      'lidarr_host', 'lidarr_port', 'lidarr_api_key',
       'min_ratio', 'log_retention_days',
       'notify_email_host', 'notify_email_port', 'notify_email_username',
       'notify_email_password', 'notify_email_from', 'notify_email_to',
@@ -1014,6 +1050,7 @@ async function saveAndTestService(service) {
     deluge: 'deluge_password',
     radarr: 'radarr_api_key',
     sonarr: 'sonarr_api_key',
+    lidarr: 'lidarr_api_key',
   };
 
   try {

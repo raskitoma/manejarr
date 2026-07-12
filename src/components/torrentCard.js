@@ -65,6 +65,8 @@ function externalInfoUrl(manager, metadata) {
     if (metadata.tvdbId) return { url: `https://www.thetvdb.com/dereferrer/series/${metadata.tvdbId}`, label: 'TVDB' };
     if (metadata.imdbId) return { url: `https://www.imdb.com/title/${metadata.imdbId}`, label: 'IMDb' };
     if (metadata.tmdbId) return { url: `https://www.themoviedb.org/tv/${metadata.tmdbId}`, label: 'TMDB' };
+  } else if (m === 'lidarr') {
+    if (metadata.mbId) return { url: `https://musicbrainz.org/artist/${metadata.mbId}`, label: 'MusicBrainz' };
   }
   return null;
 }

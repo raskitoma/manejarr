@@ -138,6 +138,12 @@ export function formatSpeed(bytesPerSec) {
 export function getLabelBadgeClass(label) {
   const map = {
     media: 'badge-media',
+    // Per-app working labels (post label-split) reuse the manager colors:
+    // Radarr = orange, Sonarr = cyan, Lidarr = purple
+    // (see .badge-radarr/.badge-sonarr/.badge-lidarr in style.css).
+    radarr: 'badge-radarr',
+    sonarr: 'badge-sonarr',
+    lidarr: 'badge-lidarr',
     ignore: 'badge-ignore',
     fordeletion: 'badge-fordeletion',
   };
