@@ -102,6 +102,13 @@ export function createLidarrClient({ host, port, apiKey }) {
   }
 
   /**
+   * Get track file(s) for a specific artist, including albumId and quality info.
+   */
+  async function getTrackFilesByArtist(artistId) {
+    return request(`/trackFile?artistId=${artistId}`);
+  }
+
+  /**
    * Collapse a set of history records into a per-album map, preferring records
    * that represent a real import (downloadImported / trackFileImported) over
    * grabs so a single torrent's albums each carry their best-known event/quality.
@@ -297,16 +304,40 @@ export function createLidarrClient({ host, port, apiKey }) {
     return request(`/qualityprofile/${profileId}`);
   }
 
+  /**
+   * Search for artists by name using Lidarr's lookup endpoint.
+   * Library-only: filters to artists already in the Lidarr library (!!a.id).
+   */
+  async function searchArtists(term) {
+    const results = await request(`/artist/lookup?term=${encodeURIComponent(term)}`);
+    return (results || [])
+      .filter(a => !!a.id)
+      .slice(0, 20)
+      .map(a => ({
+        id: a.id,
+        internalId: a.id,
+        mbId: a.foreignArtistId || null,
+        title: a.artistName || a.title,
+        year: null,
+        overview: a.overview ? a.overview.substring(0, 200) : '',
+        poster: (a.images?.find(i => i.coverType === 'poster') || a.images?.find(i => i.coverType === 'fanart'))?.remoteUrl || null,
+        status: a.status || 'inLibrary',
+        inLibrary: true,
+      }));
+  }
+
   return {
     testConnection,
     getArtists,
     getArtistById,
     getTrackFiles,
+    getTrackFilesByArtist,
     getAlbumsByHash,
     findAlbumsByPath,
     setAlbumsUnmonitored,
     getQualityProfiles,
     getQualityProfile,
+    searchArtists,
     request,
     requestRaw,
   };

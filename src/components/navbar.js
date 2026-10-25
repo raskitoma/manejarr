@@ -15,6 +15,10 @@ export function renderTopBar(pageTitle, connectionStatus = {}, runStatus = {}) {
   if (!topBar) return;
 
   const services = ['deluge', 'radarr', 'sonarr'];
+  // Lidarr is optional — only display its indicator when configured
+  if (connectionStatus?.lidarr && connectionStatus.lidarr.error !== 'Not configured') {
+    services.push('lidarr');
+  }
 
   const connectionDots = services.map(s => {
     const status = connectionStatus[s];

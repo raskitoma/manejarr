@@ -50,7 +50,7 @@ export function flattenProfileQualities(profile) {
       if (item.allowed) {
         qualities.push(item.quality.id);
       }
-    } else if (item.items) {
+    } else if (item.items && item.allowed !== false) {
       // Quality group
       for (const subItem of item.items) {
         if (subItem.quality && subItem.allowed !== false) {
@@ -64,11 +64,47 @@ export function flattenProfileQualities(profile) {
 }
 
 /**
+ * Build a Map<id, rank> for a quality profile where each allowed profile step
+ * gets an increasing rank, and quality groups assign the same rank to both the
+ * group's own `item.id` (used when `profile.cutoff` points at a group such as
+ * Lidarr's "Lossless" id=1005 or Radarr/Sonarr's "WEB 1080p" id=1000) and all
+ * of its member `subItem.quality.id` values.
+ *
+ * @param {Object} profile - The quality profile from *arr API
+ * @returns {Map<number, number>}
+ */
+function buildProfileRankMap(profile) {
+  const rankById = new Map();
+  if (!profile || !Array.isArray(profile.items)) return rankById;
+
+  let rank = 0;
+  for (const item of profile.items) {
+    if (item.quality) {
+      if (item.allowed) {
+        rankById.set(item.quality.id, rank++);
+      }
+    } else if (Array.isArray(item.items) && item.allowed !== false) {
+      const groupRank = rank++;
+      if (item.id !== undefined) {
+        rankById.set(item.id, groupRank);
+      }
+      for (const subItem of item.items) {
+        if (subItem.quality && subItem.allowed !== false) {
+          rankById.set(subItem.quality.id, groupRank);
+        }
+      }
+    }
+  }
+
+  return rankById;
+}
+
+/**
  * Check if a file's quality meets or exceeds the profile's cutoff.
  *
  * In *arr quality profiles:
  * - Items are ordered from lowest to highest preference
- * - The "cutoff" is a quality ID that represents "good enough"
+ * - The "cutoff" is a quality ID (or quality group ID) that represents "good enough"
  * - Once a file meets or exceeds the cutoff, no further upgrades are sought
  *
  * @param {Object} fileQuality - The quality object from the file (has .quality.id)
@@ -86,19 +122,17 @@ export function meetsQualityCutoff(fileQuality, profile) {
   // If file quality matches the cutoff exactly, it passes
   if (fileQualityId === cutoffId) return true;
 
-  // Get the ordered quality list from the profile
-  const orderedQualities = flattenProfileQualities(profile);
-
-  const fileIndex = orderedQualities.indexOf(fileQualityId);
-  const cutoffIndex = orderedQualities.indexOf(cutoffId);
+  const rankMap = buildProfileRankMap(profile);
+  const fileRank = rankMap.get(fileQualityId);
+  const cutoffRank = rankMap.get(cutoffId);
 
   // If either quality isn't found in the profile, use fallback hierarchy
-  if (fileIndex === -1 || cutoffIndex === -1) {
+  if (fileRank === undefined || cutoffRank === undefined) {
     return fileQualityId >= cutoffId; // Higher ID generally means higher quality
   }
 
-  // File quality is at or above the cutoff in the ordered list
-  return fileIndex >= cutoffIndex;
+  // File quality is at or above the cutoff in the ordered profile steps
+  return fileRank >= cutoffRank;
 }
 
 /**

@@ -3,15 +3,16 @@ import { updateTorrentMetadata, deleteTorrentMetadata, clearAllTorrentMetadata, 
 import { runFull, getRunStatus } from '../engine/orchestrator.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
+import { createLidarrClient } from '../clients/lidarr.js';
 import { decrypt } from '../crypto/encryption.js';
 import { extractSeriesBase, isSeriesPattern, isMoviePattern } from '../utils/seriesParser.js';
-import { buildRadarrMetadata, buildSonarrMetadata } from '../utils/metadataBuilders.js';
+import { buildRadarrMetadata, buildSonarrMetadata, buildLidarrMetadata } from '../utils/metadataBuilders.js';
 
 export const torrentsRouter = Router();
 
 /**
  * GET /api/torrents/search?q=<term>
- * Searches both Radarr and Sonarr for matching media by name.
+ * Searches Radarr, Sonarr, and Lidarr (if configured) for matching media by name.
  * Returns combined results tagged with their source manager.
  */
 torrentsRouter.get('/search', async (req, res) => {
@@ -57,11 +58,28 @@ torrentsRouter.get('/search', async (req, res) => {
       }
     }
 
+    // Try Lidarr (optional)
+    const lidarrHost = getSetting('lidarr_host');
+    const lidarrApiKey = getSetting('lidarr_api_key');
+    if (lidarrHost && lidarrApiKey) {
+      try {
+        const lidarr = createLidarrClient({
+          host: lidarrHost,
+          port: parseInt(getSetting('lidarr_port'), 10) || 8686,
+          apiKey: decrypt(lidarrApiKey),
+        });
+        const artists = await lidarr.searchArtists(q.trim());
+        results.push(...artists.map(a => ({ ...a, manager: 'lidarr' })));
+      } catch (err) {
+        console.warn('[SEARCH] Lidarr search failed:', err.message);
+      }
+    }
+
     // Sort: in-library items first, then alphabetically
     results.sort((a, b) => {
       if (a.inLibrary && !b.inLibrary) return -1;
       if (!a.inLibrary && b.inLibrary) return 1;
-      return a.title.localeCompare(b.title);
+      return (a.title || '').localeCompare(b.title || '');
     });
 
     res.json({ results: results.slice(0, 30) });
@@ -129,8 +147,8 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
       return res.status(400).json({ error: 'Missing hash, manager, or id' });
     }
     
-    if (manager !== 'radarr' && manager !== 'sonarr') {
-      return res.status(400).json({ error: 'Invalid manager. Must be radarr or sonarr' });
+    if (manager !== 'radarr' && manager !== 'sonarr' && manager !== 'lidarr') {
+      return res.status(400).json({ error: 'Invalid manager. Must be radarr, sonarr, or lidarr' });
     }
     
     const mediaId = parseInt(id, 10);
@@ -155,7 +173,7 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
             resolvedTitle = resolvedTitle || movie.title;
           }
         }
-      } else {
+      } else if (manager === 'sonarr') {
         const sonarrHost = getSetting('sonarr_host');
         const sonarrApiKey = getSetting('sonarr_api_key');
         if (sonarrHost && sonarrApiKey) {
@@ -168,6 +186,21 @@ torrentsRouter.post('/:hash/match', async (req, res) => {
           if (series) {
             primaryMetadata = { ...buildSonarrMetadata(series), manualMatchId: mediaId };
             resolvedTitle = resolvedTitle || series.title;
+          }
+        }
+      } else if (manager === 'lidarr') {
+        const lidarrHost = getSetting('lidarr_host');
+        const lidarrApiKey = getSetting('lidarr_api_key');
+        if (lidarrHost && lidarrApiKey) {
+          const lidarr = createLidarrClient({
+            host: lidarrHost,
+            port: parseInt(getSetting('lidarr_port'), 10) || 8686,
+            apiKey: decrypt(lidarrApiKey),
+          });
+          const artist = await lidarr.getArtistById(mediaId);
+          if (artist) {
+            primaryMetadata = { ...buildLidarrMetadata(artist), manualMatchId: mediaId };
+            resolvedTitle = resolvedTitle || artist.artistName;
           }
         }
       }
@@ -291,6 +324,8 @@ torrentsRouter.post('/:hash/rematch', async (req, res) => {
     const radarrApiKey = getSetting('radarr_api_key');
     const sonarrHost = getSetting('sonarr_host');
     const sonarrApiKey = getSetting('sonarr_api_key');
+    const lidarrHost = getSetting('lidarr_host');
+    const lidarrApiKey = getSetting('lidarr_api_key');
 
     const { createDelugeClient } = await import('../clients/deluge.js');
     const deluge = createDelugeClient({
@@ -321,16 +356,27 @@ torrentsRouter.post('/:hash/rematch', async (req, res) => {
         })
       : null;
 
+    const lidarr = (lidarrHost && lidarrApiKey)
+      ? createLidarrClient({
+          host: lidarrHost,
+          port: parseInt(getSetting('lidarr_port'), 10) || 8686,
+          apiKey: decrypt(lidarrApiKey),
+        })
+      : null;
+
     // Wipe any prior match so a stale id doesn't poison the same-series map
     deleteTorrentMetadata(hash);
 
     // Pattern-based routing so a series-shaped name (S01E05, 1x05, etc.)
     // never gets handed to Radarr's lookup/parser, which is greedy and will
     // happily map "Greys.Anatomy.S22E17" to some unrelated movie title.
+    // Also respect explicit per-app Deluge labels ('radarr', 'sonarr', 'lidarr').
     const seriesShape = isSeriesPattern(torrent.name);
     const movieShape = isMoviePattern(torrent.name);
-    const allowRadarr = !!radarr && !seriesShape;
-    const allowSonarr = !!sonarr && !movieShape;
+    const labelLower = (torrent.label || '').toLowerCase();
+    const allowRadarr = !!radarr && !seriesShape && labelLower !== 'sonarr' && labelLower !== 'lidarr';
+    const allowSonarr = !!sonarr && !movieShape && labelLower !== 'radarr' && labelLower !== 'lidarr';
+    const allowLidarr = !!lidarr && labelLower !== 'radarr' && labelLower !== 'sonarr';
 
     let matched = null; // { manager, title, metadata }
 
@@ -368,8 +414,25 @@ torrentsRouter.post('/:hash/rematch', async (req, res) => {
       }
     }
 
-    // 2b. Download path → Radarr/Sonarr history.
-    // Tertiary authoritative tie: the path Radarr/Sonarr reported when
+    // 2a. Hash → Lidarr (with sourceTitle history fallback)
+    if (!matched && allowLidarr) {
+      try {
+        const albMatch = await lidarr.getAlbumsByHash(hash, torrent.name);
+        if (albMatch?.artistId) {
+          const artist = albMatch.artist || await lidarr.getArtistById(albMatch.artistId);
+          matched = {
+            manager: 'lidarr',
+            title: artist.artistName,
+            metadata: { ...buildLidarrMetadata(artist), source: albMatch.source || 'hash' },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Lidarr hash lookup failed:', err.message);
+      }
+    }
+
+    // 2b. Download path → Radarr/Sonarr/Lidarr history.
+    // Tertiary authoritative tie: the path the *arr reported when
     // handing the download to Deluge should contain the torrent name.
     if (!matched && allowRadarr) {
       try {
@@ -400,6 +463,22 @@ torrentsRouter.post('/:hash/rematch', async (req, res) => {
         }
       } catch (err) {
         console.warn('[REMATCH] Sonarr path lookup failed:', err.message);
+      }
+    }
+
+    if (!matched && allowLidarr) {
+      try {
+        const pathMatch = await lidarr.findAlbumsByPath(torrent.name);
+        if (pathMatch?.artistId) {
+          const artist = await lidarr.getArtistById(pathMatch.artistId);
+          matched = {
+            manager: 'lidarr',
+            title: artist.artistName,
+            metadata: { ...buildLidarrMetadata(artist), source: pathMatch.source },
+          };
+        }
+      } catch (err) {
+        console.warn('[REMATCH] Lidarr path lookup failed:', err.message);
       }
     }
 

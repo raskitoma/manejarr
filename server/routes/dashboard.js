@@ -12,10 +12,10 @@ const router = Router();
 
 // Working (pre-processing) labels: torrents Deluge hands off with an *arr
 // download-client label, before Phase 1 relabels them to 'ignore'. Historically
-// just 'media' (shared by Radarr+Sonarr); the per-app split adds 'radarr'/'sonarr'.
+// just 'media' (shared by Radarr+Sonarr); the per-app split adds 'radarr'/'sonarr'/'lidarr'.
 // All are surfaced together as the dashboard's "media"/working bucket so split-
 // labeled torrents stay visible before Phase 1 processes them.
-const WORKING_LABELS = ['media', 'radarr', 'sonarr'];
+const WORKING_LABELS = ['media', 'radarr', 'sonarr', 'lidarr'];
 
 /**
  * GET /api/dashboard

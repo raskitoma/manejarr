@@ -58,6 +58,8 @@ export async function renderLogs() {
                   { value: 'deluge',    label: 'Deluge' },
                   { value: 'radarr',    label: 'Radarr' },
                   { value: 'sonarr',    label: 'Sonarr' },
+                  { value: 'lidarr',    label: 'Lidarr' },
+                  { value: 'torrents',  label: 'Torrents' },
                   { value: 'dashboard', label: 'Dashboard' },
                   { value: 'scheduler', label: 'Scheduler' },
                   { value: 'health',    label: 'Health Check' },

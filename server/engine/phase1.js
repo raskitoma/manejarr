@@ -146,16 +146,46 @@ export async function executePhase1(clients, settings, options = {}, log) {
             manager = null;
             torrent._match = null;
           }
+        } else if (manager === 'lidarr' && lidarr) {
+          try {
+            const trackFiles = await lidarr.getTrackFilesByArtist(manualMatchId);
+            const albumMap = new Map();
+            for (const tf of (trackFiles || [])) {
+              if (tf.albumId && !albumMap.has(tf.albumId)) {
+                albumMap.set(tf.albumId, {
+                  albumId: tf.albumId,
+                  artistId: manualMatchId,
+                  quality: tf.quality,
+                  eventType: 'downloadImported',
+                });
+              }
+            }
+            torrent._match = {
+              source: 'manual',
+              artistId: manualMatchId,
+              albums: Array.from(albumMap.values()),
+            };
+          } catch (err) {
+            log('error', 'lidarr', `Failed to fetch track files for manual match artist ${manualMatchId}: ${err.message}`);
+            manager = null;
+            torrent._match = null;
+          }
         }
       }
 
       // Pattern-based routing so series-shaped names skip Radarr (and vice
       // versa). Prevents Radarr's greedy /parse from cross-mapping a torrent
       // like "Greys.Anatomy.S22E17" onto an unrelated movie.
+      // Also prevent heuristic filename-parse / series-base fallbacks from
+      // cross-mapping torrents that carry an explicit per-app Deluge label
+      // ('radarr', 'sonarr', 'lidarr') onto a different app.
       const seriesShape = isSeriesPattern(torrent.name);
       const movieShape = isMoviePattern(torrent.name);
-      const allowRadarr = !seriesShape;
-      const allowSonarr = !movieShape;
+      const labelLower = (torrent.label || '').toLowerCase();
+      const allowRadarr = !seriesShape && labelLower !== 'sonarr' && labelLower !== 'lidarr';
+      const allowSonarr = !movieShape && labelLower !== 'radarr' && labelLower !== 'lidarr';
+      const allowRadarrParse = allowRadarr;
+      const allowSonarrParse = allowSonarr;
 
       // 2b. Try matching (if not cached or cache invalid)
       if (!manager) {
@@ -183,7 +213,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
         // hash/history match before the greedy filename-parse fallbacks below so
         // a music grab can't be mis-parsed onto a movie/series. No pattern gate —
         // music release names have no reliable movie/series shape.
-        if (!manager && lidarr) {
+        if (!manager && lidarr && labelLower !== 'radarr' && labelLower !== 'sonarr') {
           const lidarrMatch = await lidarr.getAlbumsByHash(torrent.hash, torrent.name);
           if (lidarrMatch) {
             manager = 'lidarr';
@@ -216,7 +246,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
             }
           } catch (e) { /* path lookup is best-effort */ }
         }
-        if (!manager && lidarr) {
+        if (!manager && lidarr && labelLower !== 'radarr' && labelLower !== 'sonarr') {
           try {
             const pathMatch = await lidarr.findAlbumsByPath(torrent.name);
             if (pathMatch?.artistId) {
@@ -234,7 +264,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
         // imported episode/file, which is why Run Now / Dry Run missed
         // matches that the per-row Auto-match button (which trusts the
         // parse result directly) was finding.
-        if (!manager && allowRadarr) {
+        if (!manager && allowRadarrParse) {
           try {
             const parsedRadarr = await radarr.parseFilename(torrent.name);
             if (parsedRadarr?.movie?.id) {
@@ -245,7 +275,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
           } catch (e) { /* parse fallback is best-effort */ }
         }
 
-        if (!manager && allowSonarr) {
+        if (!manager && allowSonarrParse) {
           try {
             const parsedSonarr = await sonarr.parseFilename(torrent.name);
             if (parsedSonarr?.series?.id) {
@@ -266,7 +296,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
         // shares this one's normalized series base name, reuse its seriesId.
         // Same loosening as above — accept the grouping even if the series
         // has no imported files yet, so the manager pill still shows up.
-        if (!manager && allowSonarr) {
+        if (!manager && allowSonarrParse) {
             const base = extractSeriesBase(torrent.name);
             const seriesId = base ? seriesBaseMap.get(base) : null;
             if (seriesId) {
@@ -293,6 +323,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
       const limitMet = seedingTimeMet || ratioMet;
 
       // ── RADARR BLOCK ──
+      let radarrCacheMismatch = false;
       if (manager === 'radarr') {
         const radarrMatch = torrent._match || await radarr.getMovieByHash(torrent.hash, torrent.name);
         
@@ -300,6 +331,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
         if (!radarrMatch) {
            log('warn', 'radarr', `Cache mismatch: Could not find movie for ${torrent.name} in Radarr anymore. Falling back.`);
            manager = null; // Reset and let it fall through to Sonarr or unmatched
+           radarrCacheMismatch = true;
         } else {
           log('info', 'radarr', `Matched torrent "${torrent.name}" to movie ID ${radarrMatch.movieId}`);
 
@@ -375,7 +407,7 @@ export async function executePhase1(clients, settings, options = {}, log) {
 
       // ── SONARR BLOCK ──
       // Fallthrough from Radarr if manager was reset to null
-      if (!manager) {
+      if (!manager && radarrCacheMismatch && allowSonarr) {
         const sonarrMatch = await sonarr.getEpisodesByHash(torrent.hash, torrent.name);
         if (sonarrMatch) {
             manager = 'sonarr';

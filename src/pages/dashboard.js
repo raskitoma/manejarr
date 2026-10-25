@@ -78,6 +78,8 @@ function buildExternalPosterPage(manager, metadata) {
     if (metadata.tvdbId) return `https://www.thetvdb.com/dereferrer/series/${metadata.tvdbId}`;
     if (metadata.imdbId) return `https://www.imdb.com/title/${metadata.imdbId}`;
     if (metadata.tmdbId) return `https://www.themoviedb.org/tv/${metadata.tmdbId}`;
+  } else if (m === 'lidarr') {
+    if (metadata.mbId) return `https://musicbrainz.org/artist/${metadata.mbId}`;
   }
   return metadata.infoUrl || null;
 }
@@ -896,6 +898,11 @@ function openLinkModal(hash, name) {
       <button class="match-filter-tab" data-filter="sonarr" type="button" role="tab" aria-selected="false">
         📺 Sonarr <span class="match-filter-count" id="match-count-sonarr">0</span>
       </button>
+      ${connectionInfo?.lidarr?.active ? `
+      <button class="match-filter-tab" data-filter="lidarr" type="button" role="tab" aria-selected="false">
+        🎵 Lidarr <span class="match-filter-count" id="match-count-lidarr">0</span>
+      </button>
+      ` : ''}
     </div>
 
     <div id="match-search-results" class="match-search-results">
@@ -943,12 +950,15 @@ function openLinkModal(hash, name) {
     const total = allResults.length;
     const radarr = allResults.filter(r => r.manager === 'radarr').length;
     const sonarr = allResults.filter(r => r.manager === 'sonarr').length;
+    const lidarr = allResults.filter(r => r.manager === 'lidarr').length;
     const elAll = document.getElementById('match-count-all');
     const elR = document.getElementById('match-count-radarr');
     const elS = document.getElementById('match-count-sonarr');
+    const elL = document.getElementById('match-count-lidarr');
     if (elAll) elAll.textContent = total;
     if (elR) elR.textContent = radarr;
     if (elS) elS.textContent = sonarr;
+    if (elL) elL.textContent = lidarr;
   };
 
   const renderResults = () => {
@@ -977,18 +987,21 @@ function openLinkModal(hash, name) {
       return;
     }
 
+    const mgrIcon = (m) => m === 'radarr' ? '🎬' : m === 'lidarr' ? '🎵' : '📺';
+    const mgrLabel = (m) => m === 'radarr' ? 'Movie' : m === 'lidarr' ? 'Artist' : 'Series';
+
     resultsContainer.innerHTML = currentResults.map((r, i) => `
       <div class="match-result-item ${r.inLibrary ? 'in-library' : 'not-in-library'}" data-index="${i}">
         <div class="match-result-poster">
           ${r.poster
-            ? `<img src="${r.poster}" alt="" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'match-poster-fallback\\'>${r.manager === 'radarr' ? '🎬' : '📺'}</div>'">`
-            : `<div class="match-poster-fallback">${r.manager === 'radarr' ? '🎬' : '📺'}</div>`
+            ? `<img src="${r.poster}" alt="" loading="lazy" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'match-poster-fallback\\'>${mgrIcon(r.manager)}</div>'">`
+            : `<div class="match-poster-fallback">${mgrIcon(r.manager)}</div>`
           }
         </div>
         <div class="match-result-info">
           <div class="match-result-title">${r.title}</div>
           <div class="match-result-meta">
-            <span class="badge badge-${r.manager}">${r.manager === 'radarr' ? 'Movie' : 'Series'}</span>
+            <span class="badge badge-${r.manager}">${mgrLabel(r.manager)}</span>
             ${r.year ? `<span class="match-result-year">${r.year}</span>` : ''}
             ${r.inLibrary ? `<span class="match-library-tag">✓ In Library</span>` : ''}
             ${r.seasonCount ? `<span class="text-muted">${r.seasonCount} season${r.seasonCount > 1 ? 's' : ''}</span>` : ''}
