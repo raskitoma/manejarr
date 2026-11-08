@@ -5,6 +5,7 @@ import schedulerRouter from './scheduler.js';
 import runsRouter from './runs.js';
 import logsRouter from './logs.js';
 import { torrentsRouter } from './torrents.js';
+import { encodingCleanupRouter } from './encodingCleanup.js';
 import authRouter from './auth.js';
 
 import jwt from 'jsonwebtoken';
@@ -19,6 +20,7 @@ router.use('/schedules', schedulerRouter);
 router.use('/', runsRouter);        // /api/run, /api/runs
 router.use('/logs', logsRouter);
 router.use('/torrents', torrentsRouter);
+router.use('/encoding-cleanup', encodingCleanupRouter);
 
 // Auth verification endpoint (auth required)
 router.get('/verify', (req, res) => {

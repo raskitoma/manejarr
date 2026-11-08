@@ -63,6 +63,7 @@ export async function renderLogs() {
                   { value: 'dashboard', label: 'Dashboard' },
                   { value: 'scheduler', label: 'Scheduler' },
                   { value: 'health',    label: 'Health Check' },
+                  { value: 'cleanup',   label: t('encoding-cleanup') },
                   { value: 'system',    label: 'System' },
                 ],
                 minWidth: '130px',

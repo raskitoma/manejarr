@@ -15,6 +15,7 @@ import { renderDashboard, cleanupDashboard } from './pages/dashboard.js';
 import { renderSettings } from './pages/settings.js';
 import { renderScheduler } from './pages/scheduler.js';
 import { renderLogs } from './pages/logs.js';
+import { renderEncodingCleanup } from './pages/encodingCleanup.js';
 import { render404, cleanup404 } from './pages/404.js';
 import { initI18n, t } from './utils/i18n.js';
 import { initTheme } from './utils/theme.js';
@@ -40,6 +41,7 @@ const PAGES = {
   settings: { title: 'Settings', render: renderSettings },
   scheduler: { title: 'Scheduler', render: renderScheduler },
   logs: { title: 'Event Logs', render: renderLogs },
+  'encoding-cleanup': { title: 'Encoding Cleanup', render: renderEncodingCleanup },
   404: { title: 'Page Not Found', render: render404, cleanup: cleanup404 },
 };
 
@@ -70,7 +72,7 @@ async function navigate() {
   renderSidebar(route);
 
   // Update top bar with connection status
-  renderTopBar(page.title, connectionStatus, runStatus);
+  renderTopBar(route === 'encoding-cleanup' ? t('encoding-cleanup') : page.title, connectionStatus, runStatus);
 
   // Render the page
   try {
@@ -355,7 +357,7 @@ async function refreshConnectionStatus() {
   // Update top bar
   const route = getRoute();
   const page = PAGES[route] || PAGES.dashboard;
-  renderTopBar(page.title, connectionStatus, runStatus);
+  renderTopBar(route === 'encoding-cleanup' ? t('encoding-cleanup') : page.title, connectionStatus, runStatus);
 }
 
 // ── App Init ──

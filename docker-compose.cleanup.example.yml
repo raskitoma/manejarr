@@ -1,0 +1,20 @@
+services:
+  manejarr:
+    environment:
+      ENCODING_CLEANUP: "true"
+      CLEANUP_RADARR_OUTPUT: "${CLEANUP_RADARR_OUTPUT:-/downloads/completed}"
+      CLEANUP_SONARR_OUTPUT: "${CLEANUP_SONARR_OUTPUT:-/downloads/completed}"
+      CLEANUP_RADARR_LIBRARY: "${CLEANUP_RADARR_LIBRARY:-/media}"
+      CLEANUP_SONARR_LIBRARY: "${CLEANUP_SONARR_LIBRARY:-/media}"
+    volumes:
+      - type: bind
+        source: ${CLEANUP_OUTPUT_HOST:?Set CLEANUP_OUTPUT_HOST to the HandBrake output directory}
+        target: /cleanup/output
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CLEANUP_LIBRARY_HOST:?Set CLEANUP_LIBRARY_HOST to the final library parent directory}
+        target: /cleanup/library
+        read_only: true
+        bind:
+          create_host_path: false

@@ -1,7 +1,7 @@
 /**
  * Sidebar Navigation Component
  */
-import { clearCredentials } from '../utils/api.js';
+import { api, clearCredentials, hasCredentials } from '../utils/api.js';
 import { t, setLanguage, getLanguage } from '../utils/i18n.js';
 import { toggleTheme, getCurrentTheme } from '../utils/theme.js';
 import { renderCustomSelect, attachCustomSelect } from './customSelect.js';
@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { id: 'scheduler', label: 'Scheduler', icon: '🕐', hash: '#/scheduler' },
   { id: 'logs', label: 'Event Logs', icon: '📋', hash: '#/logs' },
 ];
+
+let cleanupStatus;
 
 export function renderSidebar(activeRoute) {
   const sidebar = document.getElementById('sidebar');
@@ -31,6 +33,7 @@ export function renderSidebar(activeRoute) {
     </a>
     <nav class="sidebar-nav">
       ${navLinks}
+      <span data-cleanup-link></span>
     </nav>
     <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: var(--space-md);">
       <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 var(--space-xs);">
@@ -58,6 +61,20 @@ export function renderSidebar(activeRoute) {
       </div>
     </div>
   `;
+
+  if (hasCredentials()) {
+    cleanupStatus ||= api.get('/encoding-cleanup/status').catch(() => {
+      cleanupStatus = undefined;
+      return { enabled: false };
+    });
+    const slot = sidebar.querySelector('[data-cleanup-link]');
+    cleanupStatus.then(({ enabled }) => {
+      if (!enabled || !slot.isConnected) return;
+      slot.innerHTML = `<a href="#/encoding-cleanup" class="sidebar-link ${activeRoute === 'encoding-cleanup' ? 'active' : ''}">
+        <span class="sidebar-link-icon">🎞️</span><span>${t('encoding-cleanup')}</span></a>`;
+      slot.firstElementChild.onclick = () => sidebar.classList.remove('open');
+    });
+  }
 
   // Close sidebar on mobile when a link is clicked
   sidebar.querySelectorAll('.sidebar-link').forEach(link => {

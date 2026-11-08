@@ -17,6 +17,7 @@ Manejarr is a high-performance, containerized service-to-service orchestration l
 - **📅 Advanced Scheduler** — Integrated cron scheduler with a modern, slider-based interface.
 - **📊 Real-time Dashboard** — Live torrent overview with connection health indicators.
 - **📜 Rich Event Logging** — Detailed history with category filtering and CSV export capabilities.
+- **Encoding Cleanup** — Optionally review HandBrake output against Radarr and Sonarr import records and delete verified files individually or in batches.
 - **🐳 Docker Native** — Single-container deployment with zero external dependencies (internal SQLite).
 
 ---
@@ -69,8 +70,42 @@ Manejarr scans every working torrent (anything not already `ignore`/`fordeletion
 ### Phase 2: The Harvest
 It monitors `ignore` torrents against your retention rules. Once the time or ratio threshold is crossed, the torrent is paused and relabeled to `fordeletion`.
 
-> [!IMPORTANT]
-> **Safety First:** Manejarr is non-destructive. It will **never** delete your files or torrents—it only manages labels and pause states.
+The torrent workflow labels and pauses torrents. Encoding Cleanup is a separate, optional action that permanently deletes selected files from the writable encoding output mount after confirmation.
+
+### Optional Encoding Cleanup
+
+In a setup with Jackett, Deluge, and HandBrake, Radarr and Sonarr find releases through Jackett and send them to Deluge. Deluge downloads into `incomplete`, moves the original payload to `completed` for seeding, and copies or extracts an input to the HandBrake watch folder. HandBrake encodes that input into its output folder. Radarr and Sonarr import the encode into their final libraries and may rename it. Encoding Cleanup helps remove the output copy after import.
+
+For example, these mounts give Deluge and the *arr apps different views of `/downloads/completed`:
+
+| App | NAS source | Container path |
+| --- | --- | --- |
+| Deluge | `/mnt/backup/downloads` | `/downloads` |
+| HandBrake | `/mnt/backup/downloads/copied` | `/watch` |
+| HandBrake | `/mnt/backup/downloads/HBWork/output` | `/output` |
+| Radarr and Sonarr | `/mnt/backup/downloads` | `/downloads` |
+| Radarr and Sonarr | `/mnt/backup/downloads/HBWork/output` | `/downloads/completed` |
+
+For Manejarr, add the following to your existing `.env`. Replace the library path with the host directory that corresponds to the prefix your *arr apps report. Subdirectories such as movies, concerts, documentaries, and series can all live under this mount.
+
+```dotenv
+CLEANUP_OUTPUT_HOST=/mnt/backup/downloads/HBWork/output
+CLEANUP_LIBRARY_HOST=/path/to/final/library
+CLEANUP_RADARR_OUTPUT=/downloads/completed
+CLEANUP_SONARR_OUTPUT=/downloads/completed
+CLEANUP_RADARR_LIBRARY=/media
+CLEANUP_SONARR_LIBRARY=/media
+```
+
+Run Compose with the optional override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cleanup.example.yml up -d --build
+```
+
+The override mounts the encode output read-write at `/cleanup/output` and the library parent read-only at `/cleanup/library`. Paths under each reported prefix must have the same relative layout inside the corresponding Manejarr mount. If Manejarr runs on another host, mount the NAS shares on that host first and use those host paths in the override. To disable cleanup, recreate the service with the base Compose file.
+
+Open **Encoding Cleanup** to see the output files, their last-modified age (for example, `1d 16h ago`), import status, and final library path. Select up to 100 verified files and review the paths before confirming deletion. Manejarr requires an exact output path in recent successful import history, a current *arr file record, and a corresponding regular library file of the same size. It checks file identity and the library again at deletion time. The scan checks up to 10,000 recent import records per app. Unavailable or ambiguous records leave files ineligible. The feature uses import records and size checks, with no content hashing. It removes only selected output videos and logs each result under **Encoding Cleanup**.
 
 ---
 
