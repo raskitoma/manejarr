@@ -3043,3 +3043,23 @@ a.hover-card-poster.empty-poster:hover {
     display: none;
   }
 }
+
+.cleanup-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: end;
+}
+
+.cleanup-filters label {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.cleanup-selectable {
+  cursor: pointer;
+}
+
+.table tr.cleanup-selected td {
+  background: var(--bg-tertiary);
+}
