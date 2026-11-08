@@ -9,9 +9,18 @@ export function relativeTo(root, target) {
   return relative;
 }
 
-export function createLocalStorage(output, library) {
+export function createLocalStorage(output, library, { appSubdirs = false } = {}) {
+  function inspectLibrary(relative, manager) {
+    if (appSubdirs && !['radarr', 'sonarr'].includes(manager)) throw new Error('Unknown library');
+    if (typeof relative !== 'string' || path.isAbsolute(relative) || path.normalize(relative) !== relative ||
+        relativeTo(library, path.resolve(library, relative)) !== relative) {
+      throw new Error('Invalid library path');
+    }
+    return inspect(library, appSubdirs ? `${manager}/${relative}` : relative);
+  }
+
   async function inspect(root, relative) {
-    if (!relative || path.isAbsolute(relative)) throw new Error('Invalid file path');
+    if (typeof relative !== 'string' || !relative || path.isAbsolute(relative)) throw new Error('Invalid file path');
     const target = path.resolve(root, relative);
     if (relativeTo(root, target) !== relative || await realpath(target) !== target) {
       throw new Error('Unsafe file path');
@@ -52,10 +61,23 @@ export function createLocalStorage(output, library) {
   return {
     checkRoots,
     walk,
+    async listOutput() {
+      await checkRoots();
+      const files = [];
+      for await (const relative of walk()) {
+        const source = await inspect(output, relative).catch(() => null);
+        if (source) files.push({ relative, ...source });
+      }
+      return files;
+    },
     inspectOutput: (relative) => inspect(output, relative),
-    inspectLibrary: (relative) => inspect(library, relative),
-    async remove(relative, expected) {
-      if ((await inspect(output, relative)).identity !== expected) return false;
+    inspectLibrary,
+    async remove(relative, expected, destination) {
+      if (!video.test(relative) || !destination) return false;
+      const target = await inspectLibrary(destination.relative, destination.manager);
+      const source = await inspect(output, relative);
+      if (source.identity !== expected || target.identity !== destination.identity ||
+          source.size !== target.size || source.identity === target.identity) return false;
       await unlink(path.join(output, relative));
       return true;
     },

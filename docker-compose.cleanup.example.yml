@@ -2,6 +2,7 @@ services:
   manejarr:
     environment:
       ENCODING_CLEANUP: "true"
+      CLEANUP_STORAGE: local
       CLEANUP_RADARR_OUTPUT: "${CLEANUP_RADARR_OUTPUT:-/downloads/completed}"
       CLEANUP_SONARR_OUTPUT: "${CLEANUP_SONARR_OUTPUT:-/downloads/completed}"
       CLEANUP_RADARR_LIBRARY: "${CLEANUP_RADARR_LIBRARY:-/media}"

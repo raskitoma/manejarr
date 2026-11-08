@@ -103,9 +103,56 @@ Run Compose with the optional override:
 docker compose -f docker-compose.yml -f docker-compose.cleanup.example.yml up -d --build
 ```
 
-The override mounts the encode output read-write at `/cleanup/output` and the library parent read-only at `/cleanup/library`. Paths under each reported prefix must have the same relative layout inside the corresponding Manejarr mount. If Manejarr runs on another host, mount the NAS shares on that host first and use those host paths in the override. To disable cleanup, recreate the service with the base Compose file.
+The override mounts the encode output read-write at `/cleanup/output` and the library parent read-only at `/cleanup/library`. Paths under each reported prefix must have the same relative layout inside the corresponding Manejarr mount. For a remote Manejarr host, either mount the NAS shares on that host and use the local override or run the helper below. To disable local cleanup, recreate the service with the base Compose file.
 
 Open **Encoding Cleanup** to see the output files, their last-modified age (for example, `1d 16h ago`), import status, and final library path. Select up to 100 verified files and review the paths before confirming deletion. Manejarr requires an exact output path in recent successful import history, a current *arr file record, and a corresponding regular library file of the same size. It checks file identity and the library again at deletion time. The scan checks up to 10,000 recent import records per app. Unavailable or ambiguous records leave files ineligible. The feature uses import records and size checks, with no content hashing. It removes only selected output videos and logs each result under **Encoding Cleanup**.
+
+---
+
+### Optional NAS helper
+
+Run the helper on the media host when the Manejarr host cannot mount its shares. The helper lists files, reads file metadata, and checks source and library file identity immediately before deleting an output video. Manejarr keeps the Radarr and Sonarr credentials, import matching, and confirmation UI. The helper does not need those credentials or the Manejarr database.
+
+On the NAS, set the following in a private helper environment file such as `.env.helper`. Generate the shared token with `openssl rand -hex 32`. Bind the helper to a private encrypted network interface such as a Tailscale address. For access outside that network, use HTTPS with a trusted certificate. Keep the helper off public interfaces.
+
+```dotenv
+CLEANUP_HELPER_TOKEN=<shared random token>
+CLEANUP_HELPER_BIND_IP=<NAS private network address>
+CLEANUP_HELPER_UID=1000
+CLEANUP_HELPER_GID=1000
+CLEANUP_OUTPUT_HOST=/mnt/backup/downloads/HBWork/output
+```
+
+Set the UID and GID to an account that can remove files from the output directories and read the library. Add a NAS-side Compose override such as `docker-compose.helper-library.yml` with the final library mounted read-only:
+
+```yaml
+services:
+  cleanup-helper:
+    volumes:
+      - /path/to/final/library:/cleanup/library:ro
+```
+
+When the two *arr apps use different views of the same prefix, set `CLEANUP_HELPER_APP_SUBDIRS=true` in `.env.helper` and mount libraries under app-specific directories. For example, map Radarr's `/mnt/video` to `/cleanup/library/radarr/video` and Sonarr's `/mnt/series2` to `/cleanup/library/sonarr/series2`. Both corresponding library prefixes on Manejarr would be `/mnt`.
+
+```bash
+chmod 600 .env.helper
+docker compose --env-file .env.helper -f docker-compose.cleanup-helper.yml -f docker-compose.helper-library.yml up -d --build
+```
+
+On the Manejarr host, add the following to the existing `.env` and rebuild with the regular Compose setup. Use the same token and the library prefixes as seen by the *arr apps. The `/media` values below are examples for a shared library mount.
+
+```dotenv
+ENCODING_CLEANUP=true
+CLEANUP_STORAGE=helper
+CLEANUP_HELPER_URL=http://<NAS-private-network-address>:8789
+CLEANUP_HELPER_TOKEN=<same shared random token>
+CLEANUP_RADARR_OUTPUT=/downloads/completed
+CLEANUP_SONARR_OUTPUT=/downloads/completed
+CLEANUP_RADARR_LIBRARY=/media
+CLEANUP_SONARR_LIBRARY=/media
+```
+
+Use HTTP only over an encrypted private network. If the helper is unreachable, cleanup is unavailable until it reconnects. To return to local mounts, use the local Compose override. To turn cleanup off, set `ENCODING_CLEANUP=false` and recreate Manejarr with its regular Compose setup.
 
 ---
 

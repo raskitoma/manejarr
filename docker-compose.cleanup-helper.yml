@@ -1,0 +1,21 @@
+services:
+  cleanup-helper:
+    build:
+      context: .
+      dockerfile: Dockerfile.cleanup-helper
+    restart: unless-stopped
+    user: "${CLEANUP_HELPER_UID:-1000}:${CLEANUP_HELPER_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      CLEANUP_HELPER_TOKEN: "${CLEANUP_HELPER_TOKEN:?Set a shared random token}"
+      CLEANUP_HELPER_APP_SUBDIRS: "${CLEANUP_HELPER_APP_SUBDIRS:-false}"
+    ports:
+      - "${CLEANUP_HELPER_BIND_IP:-127.0.0.1}:${CLEANUP_HELPER_PORT:-8789}:8789"
+    volumes:
+      - type: bind
+        source: ${CLEANUP_OUTPUT_HOST:?Set CLEANUP_OUTPUT_HOST}
+        target: /cleanup/output
+        bind:
+          create_host_path: false

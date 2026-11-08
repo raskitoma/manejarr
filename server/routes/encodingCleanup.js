@@ -6,12 +6,16 @@ import { getSetting, insertEventLog } from '../db/database.js';
 import { decrypt } from '../crypto/encryption.js';
 import { createRadarrClient } from '../clients/radarr.js';
 import { createSonarrClient } from '../clients/sonarr.js';
+import { createHelperStorage } from '../cleanup/helperStorage.js';
 import { createLocalStorage } from '../cleanup/localStorage.js';
 import { readImports, verifyImport } from '../cleanup/imports.js';
 
 export const encodingCleanupRouter = Router();
 const enabled = process.env.ENCODING_CLEANUP === 'true';
-const storage = createLocalStorage('/cleanup/output', '/cleanup/library');
+const storageMode = process.env.CLEANUP_STORAGE || 'local';
+const storage = storageMode === 'helper'
+  ? createHelperStorage(process.env.CLEANUP_HELPER_URL, process.env.CLEANUP_HELPER_TOKEN)
+  : createLocalStorage('/cleanup/output', '/cleanup/library');
 const selectionKey = createHmac('sha256', config.encryptionKey).update('encoding-cleanup').digest();
 const maxSelection = 100;
 let deleting = false;
@@ -50,23 +54,23 @@ async function getHistory(sources) {
 encodingCleanupRouter.get('/status', (req, res) => res.json({ enabled }));
 encodingCleanupRouter.use((req, res, next) => {
   if (!enabled) return res.sendStatus(404);
+  if (!['local', 'helper'].includes(storageMode)) return res.status(503).json({ error: 'Invalid cleanup storage mode' });
   next();
 });
 
 encodingCleanupRouter.get('/', async (req, res) => {
+  let inventory;
   try {
-    await storage.checkRoots();
+    inventory = await storage.listOutput();
   } catch {
     return res.status(503).json({ error: 'cleanup_storage_unavailable' });
   }
-  const sources = new Set();
-  for await (const relative of storage.walk()) sources.add(relative);
+  const sources = new Set(inventory.map(file => file.relative));
   const history = sources.size ? await getHistory(sources) : { available: [], incomplete: false };
   const files = [];
-  for (const relative of sources) {
-    const source = await storage.inspectOutput(relative).catch(() => null);
-    if (!source) continue;
-    const { evidence, ...result } = await verifyImport(storage, relative, source, history);
+  for (const source of inventory) {
+    const { relative } = source;
+    const { evidence, target, ...result } = await verifyImport(storage, relative, source, history);
     const token = evidence && jwt.sign(
       { relative, identity: source.identity, evidence }, selectionKey,
       { expiresIn: '30m', audience: 'encoding-cleanup', subject: req.user.username },
@@ -104,7 +108,7 @@ encodingCleanupRouter.post('/delete', async (req, res) => {
         const source = await storage.inspectOutput(relative);
         if (source.identity === identity) {
           const current = await verifyImport(storage, relative, source, history);
-          if (JSON.stringify(current.evidence) === JSON.stringify(evidence) && await storage.remove(relative, identity)) {
+          if (JSON.stringify(current.evidence) === JSON.stringify(evidence) && await storage.remove(relative, identity, current.target)) {
             status = 'deleted';
           }
         }

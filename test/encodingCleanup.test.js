@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { mapPath, readImports, verifyImport } from '../server/cleanup/imports.js';
+import { createHelperApp } from '../server/cleanup/helper.js';
+import { createHelperStorage } from '../server/cleanup/helperStorage.js';
 import { createLocalStorage } from '../server/cleanup/localStorage.js';
 
 test('maps exact import paths and deduplicates multi-episode imports by file', async () => {
@@ -61,9 +63,26 @@ test('verifies a renamed library file, then deletes only the reviewed source', a
   assert.equal((await verifyImport(storage, 'encode.mkv', source, history)).status, 'library_unavailable');
   await writeFile(libraryPath, 'wrong size');
   assert.equal((await verifyImport(storage, 'encode.mkv', source, history)).status, 'size_differs');
-  await writeFile(sourcePath, 'new video');
-  assert.equal(await storage.remove('encode.mkv', source.identity), false);
-  assert.equal(await readFile(sourcePath, 'utf8'), 'new video');
-  assert.equal(await storage.remove('encode.mkv', (await storage.inspectOutput('encode.mkv')).identity), true);
-  assert.equal(await readFile(libraryPath, 'utf8'), 'wrong size');
+  await writeFile(libraryPath, 'video');
+  const current = await verifyImport(storage, 'encode.mkv', source, history);
+  await writeFile(sourcePath, 'other');
+  assert.equal(await storage.remove('encode.mkv', source.identity, current.target), false);
+  assert.equal(await readFile(sourcePath, 'utf8'), 'other');
+
+  const token = 'a'.repeat(48);
+  const server = createHelperApp(storage, token).listen(0, '127.0.0.1');
+  t.after(() => server.close());
+  await new Promise(resolve => server.once('listening', resolve));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const remote = createHelperStorage(url, token);
+  await assert.rejects(createHelperStorage(url, 'b'.repeat(48)).listOutput(), /401/);
+  await assert.rejects(remote.inspectOutput('../library/renamed.mkv'), /409/);
+  const [reviewed] = await remote.listOutput();
+  assert.equal(reviewed.relative, 'encode.mkv');
+  await writeFile(libraryPath, 'changed after review');
+  assert.equal(await remote.remove(reviewed.relative, reviewed.identity, current.target), false);
+  await writeFile(libraryPath, 'video');
+  const libraryFile = await remote.inspectLibrary('renamed.mkv', 'sonarr');
+  assert.equal(await remote.remove(reviewed.relative, reviewed.identity, { ...current.target, identity: libraryFile.identity }), true);
+  assert.equal(await readFile(libraryPath, 'utf8'), 'video');
 });

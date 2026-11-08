@@ -49,11 +49,16 @@ export async function verifyImport(storage, relative, source, history) {
     record.destination = file.path || match.path;
     const target = mapPath(app.libraryPrefix, file.path);
     if (file.id !== match.id || !target) return { ...record, status: 'library_unavailable' };
-    const destination = await storage.inspectLibrary(target);
-    if (destination.size !== source.size || Number(file.size) !== source.size) {
+    const destination = await storage.inspectLibrary(target, app.name);
+    if (destination.size !== source.size || Number(file.size) !== source.size || source.identity === destination.identity) {
       return { ...record, status: 'size_differs' };
     }
-    return { ...record, status: 'verified', evidence: [app.name, match.id, file.path, destination.identity] };
+    return {
+      ...record,
+      status: 'verified',
+      evidence: [app.name, match.id, file.path, destination.identity],
+      target: { relative: target, manager: app.name, identity: destination.identity },
+    };
   } catch {
     return { ...record, status: 'library_unavailable' };
   }
