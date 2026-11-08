@@ -2,7 +2,7 @@ FROM node:20-alpine
 WORKDIR /app
 COPY --chmod=644 package*.json ./
 RUN npm ci --omit=dev && mkdir -p /cleanup/output /cleanup/library
-COPY --chmod=644 server/cleanup/helper.js server/cleanup/localStorage.js ./server/cleanup/
+COPY --chmod=644 server/cleanup/helper.js server/cleanup/localStorage.js ./
 USER node
 EXPOSE 8789
-CMD ["node", "server/cleanup/helper.js"]
+CMD ["node", "helper.js"]
