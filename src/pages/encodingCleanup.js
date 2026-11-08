@@ -156,7 +156,9 @@ export async function renderEncodingCleanup(results = []) {
         title: t('cleanup_delete'),
         closeOnOutsideClick: false,
         content: `<p>${t('cleanup_confirm')} (${chosen.length}, ${total})</p>
-          <ul>${chosen.map(file => `<li>${escapeHtml(file.relative)} → ${escapeHtml(file.destination)}</li>`).join('')}</ul>
+          <ul class="cleanup-terminal" tabindex="0" aria-label="${t('cleanup_delete')}">${chosen.map(file => `
+            <li><span>${escapeHtml(file.relative)}</span><span>→ ${escapeHtml(file.destination)}</span></li>
+          `).join('')}</ul>
           <p id="encoding-delete-error" role="alert"></p>`,
         footer: `<button class="btn btn-danger" id="encoding-confirm">${t('cleanup_delete')}</button>`,
       });

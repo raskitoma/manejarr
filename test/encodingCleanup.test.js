@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -85,4 +85,36 @@ test('verifies a renamed library file, then deletes only the reviewed source', a
   const libraryFile = await remote.inspectLibrary('renamed.mkv', 'sonarr');
   assert.equal(await remote.remove(reviewed.relative, reviewed.identity, { ...current.target, identity: libraryFile.identity }), true);
   assert.equal(await readFile(libraryPath, 'utf8'), 'video');
+});
+
+test('removes an empty matching release folder after the last episode', async (t) => {
+  const base = await realpath(await mkdtemp(path.join(tmpdir(), 'manejarr-release-')));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const output = path.join(base, 'output');
+  const library = path.join(base, 'library');
+  const release = 'media/Show Name S01 1080p H 264';
+  const first = `${release}/show.name.s01e01.1080p.x265.mkv`;
+  const last = `${release}/show.name.s01e02.1080p.x265.mkv`;
+  await mkdir(path.join(output, release), { recursive: true });
+  await mkdir(library);
+  await writeFile(path.join(library, 'stored.mkv'), 'video');
+  const storage = createLocalStorage(output, library);
+  const stored = await storage.inspectLibrary('stored.mkv');
+  const destination = { relative: 'stored.mkv', identity: stored.identity };
+
+  for (const file of [first, last, 'media/unrelated.mkv']) {
+    await writeFile(path.join(output, file), 'video');
+  }
+  async function remove(file) {
+    const reviewed = await storage.inspectOutput(file);
+    assert.equal(await storage.remove(file, reviewed.identity, destination), true);
+  }
+
+  await remove(first);
+  assert.equal(await readFile(path.join(output, last), 'utf8'), 'video');
+  await remove(last);
+  await assert.rejects(readFile(path.join(output, release)), { code: 'ENOENT' });
+  await remove('media/unrelated.mkv');
+  assert.deepEqual(await storage.listOutput(), []);
+  assert.deepEqual(await readdir(output), ['media']);
 });

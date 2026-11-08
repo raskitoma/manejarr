@@ -1,7 +1,28 @@
-import { lstat, readdir, realpath, unlink } from 'node:fs/promises';
+import { lstat, readdir, realpath, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 const video = /\.(mkv|mp4|m4v|avi|mov|webm|mpg|mpeg|ts|m2ts|wmv)$/i;
+
+function releaseName(name) {
+  return name.normalize('NFKC').toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\b(s\d{1,2})(?:e\d{1,3})+\b/g, '$1')
+    .replace(/\b[hx] ?26[45]\b/g, ' codec')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function removeEmptyReleaseFolder(output, file) {
+  const parent = path.dirname(file);
+  const folderName = releaseName(path.basename(parent));
+  if (parent === output || !folderName || folderName !== releaseName(path.parse(file).name)) return;
+
+  try {
+    if (await realpath(parent) === parent) await rmdir(parent);
+  } catch {
+    // Folder removal is optional. rmdir preserves all non-empty directories.
+  }
+}
 
 export function relativeTo(root, target) {
   const relative = path.relative(root, target);
@@ -78,7 +99,9 @@ export function createLocalStorage(output, library, { appSubdirs = false } = {})
       const source = await inspect(output, relative);
       if (source.identity !== expected || target.identity !== destination.identity ||
           source.size !== target.size || source.identity === target.identity) return false;
-      await unlink(path.join(output, relative));
+      const file = path.join(output, relative);
+      await unlink(file);
+      await removeEmptyReleaseFolder(output, file);
       return true;
     },
   };

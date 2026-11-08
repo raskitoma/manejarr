@@ -3063,3 +3063,29 @@ a.hover-card-poster.empty-poster:hover {
 .table tr.cleanup-selected td {
   background: var(--bg-tertiary);
 }
+
+.cleanup-terminal {
+  max-height: min(14rem, 35dvh);
+  overflow: auto;
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid #334155;
+  border-radius: var(--radius-md);
+  background: #0b1220;
+  color: #e2e8f0;
+  font: 0.8rem/1.45 ui-monospace, monospace;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.cleanup-terminal li + li {
+  margin-top: var(--space-sm);
+}
+
+.cleanup-terminal li span {
+  display: block;
+}
+
+.cleanup-terminal li span + span {
+  color: #a7c0df;
+}
