@@ -102,7 +102,7 @@ test('removes an empty matching release folder after the last episode', async (t
   const stored = await storage.inspectLibrary('stored.mkv');
   const destination = { relative: 'stored.mkv', identity: stored.identity };
 
-  for (const file of [first, last, 'media/unrelated.mkv']) {
+  for (const file of [first, last, 'media/media.mkv']) {
     await writeFile(path.join(output, file), 'video');
   }
   async function remove(file) {
@@ -114,7 +114,7 @@ test('removes an empty matching release folder after the last episode', async (t
   assert.equal(await readFile(path.join(output, last), 'utf8'), 'video');
   await remove(last);
   await assert.rejects(readFile(path.join(output, release)), { code: 'ENOENT' });
-  await remove('media/unrelated.mkv');
+  await remove('media/media.mkv');
   assert.deepEqual(await storage.listOutput(), []);
   assert.deepEqual(await readdir(output), ['media']);
 });

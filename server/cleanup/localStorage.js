@@ -15,7 +15,8 @@ function releaseName(name) {
 async function removeEmptyReleaseFolder(output, file) {
   const parent = path.dirname(file);
   const folderName = releaseName(path.basename(parent));
-  if (parent === output || !folderName || folderName !== releaseName(path.parse(file).name)) return;
+  if (parent === output || path.relative(output, parent).toLowerCase() === 'media') return;
+  if (!folderName || folderName !== releaseName(path.parse(file).name)) return;
 
   try {
     if (await realpath(parent) === parent) await rmdir(parent);
